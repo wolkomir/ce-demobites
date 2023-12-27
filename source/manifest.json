@@ -1,0 +1,81 @@
+{
+  "__firefox__manifest_version": 2,
+  "__chrome|opera|edge__manifest_version": 3,
+  "name": "Demo Bites",
+  "version": "1.0.2",
+
+  "icons": {
+    "128": "assets/Icons/icon-128.png"
+  },
+  "description": "A chrome extension to assist your comment post in LinkedIn",
+  "short_name": "DemoBites",
+
+  "__firefox__permissions": [
+    "tabs",
+    "identity",
+    "storage",
+    "https://us-central1-gptchromeextension.cloudfunctions.net/*"
+  ],
+
+  "__chrome|opera|edge__permissions": ["tabs", "identity", "storage"],
+  "__chrome|opera|edge__host_permissions": [
+    "https://us-central1-gptchromeextension.cloudfunctions.net/*"
+  ],
+  "__firefox__content_security_policy": "script-src 'self' https://apis.google.com; object-src 'self';",
+  "__chrome|opera|edge__content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';script-src-elem 'self' 'unsafe-inline'",
+    "sandbox": "sandbox allow-scripts; script-src 'self'; object-src 'self'"
+  },
+  "__chrome|firefox__author": "Evy AI",
+  "__opera__developer": {
+    "name": "Demo Bites"
+  },
+
+  "__firefox__applications": {
+    "gecko": {
+      "id": "{754FB1AD-CC3B-4856-B6A0-7786F8CA9D17}"
+    }
+  },
+
+  "__chrome__minimum_chrome_version": "88",
+  "__opera__minimum_opera_version": "73",
+
+  "__chrome|opera|edge__action": {
+    "default_icon": {
+      "128": "assets/Icons/icon-128.png"
+    },
+    "default_title": "Demo Bites"
+  },
+
+  "__firefox__browser_action": {
+    "default_icon": {
+      "128": "assets/Icons/icon-128.png"
+    },
+    "default_title": "Demo Bites"
+  },
+  "background": {
+    "__firefox__scripts": ["js/background.bundle.js"],
+    "__chrome|opera|edge__service_worker": "js/background.bundle.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["js/contentScript.bundle.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "__chrome|opera|edge__web_accessible_resources": [
+    {
+      "resources": ["js/contentScript.bundle.js", "assets/*"],
+      "matches": ["https://*.linkedin.com/*", "http://*.linkedin.com/*"]
+    }
+  ],
+  "__firefox__web_accessible_resources": [
+    "js/contentScript.bundle.js",
+    "assets/*"
+  ],
+  "oauth2": {
+    "client_id": "776551117048-qtknk0lcqsr36tqj9t6dijj6ouuqpbmd.apps.googleusercontent.com",
+    "scopes": ["email", "https://www.googleapis.com/auth/userinfo.email"]
+  }
+}
