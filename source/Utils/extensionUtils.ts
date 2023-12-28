@@ -171,7 +171,7 @@ export const  getPermissionStatus = async (permissionName: string) => {
   let status = PERMISSIONS.DENIED;
   
   try {
-    const permissionStatus = await navigator.permissions.query({name: permissionName});
+    const permissionStatus = await navigator.permissions.query({name: permissionName as PermissionName});
     status = permissionStatus.state;
   } catch(error) {
     console.log("Error while getPermissionStatus", error);
