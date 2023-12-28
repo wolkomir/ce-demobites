@@ -11,6 +11,10 @@ import {
   sendMessageToAllTab,
   handleContentScriptInjection,
 } from "../Utils/extensionUtils";
+import { getImagePath } from "../Utils";
+
+let isRecording = false;
+let pinnedTabId = 0;
 
 const toolbarIconClick = async (tab: Tabs.Tab) => {
   console.log("toolbar button clicked", tab);
@@ -20,7 +24,16 @@ const toolbarIconClick = async (tab: Tabs.Tab) => {
     // await handleContentScriptInjection(tab.id, tab.url);
     if (tab?.url && tab?.id) {
       if (tab.status === "complete") {
-        await sentMessageToContentScript(tab.id, MESSAGE_ACTION.TOGGLE_POPUP);
+        if (isRecording) {
+          isRecording = false;
+          chrome.tabs.sendMessage(pinnedTabId, {
+            action: MESSAGE_ACTION.STOP_RECORDING,
+          });
+          chrome.action.setIcon({path: getImagePath("not-recording.png")});
+        } else {
+          await sentMessageToContentScript(tab.id, MESSAGE_ACTION.SHOW_POPUP);
+        }
+        
       } else {
         
       }
@@ -51,6 +64,44 @@ const onMessageListener = async (
         }
         break;
       }
+      case MESSAGE_ACTION.START_RECORDING: {
+        const {selectedMicrophoneDeviceId} = msg.data;
+        chrome.tabCapture.getMediaStreamId({
+          targetTabId: sender.tab?.id,
+        }, async (streamId) => {
+          console.log({selectedMicrophoneDeviceId, streamId})
+          chrome.action.setIcon({path: getImagePath("recording.png")});
+          isRecording = true;
+          pinnedTabId = (
+            await chrome.tabs.create({
+              pinned: true,
+              url: './pinnedTab.html',
+              active: false,
+              index: 0,
+            })
+          ).id!;
+          setTimeout(() => {
+            chrome.tabs.sendMessage(pinnedTabId, {
+              action: MESSAGE_ACTION.START_RECORDING,
+              data: {
+                streamId,
+                selectedMicrophoneDeviceId
+              }
+            });
+          }, 1000);
+        });
+        break;
+      }
+      case MESSAGE_ACTION.STOP_RECORDING: {
+        break;
+      }
+      case MESSAGE_ACTION.RECORDING_COMPLETED: {
+        console.log({pinnedTabIdInRecordingCompleted: pinnedTabId})
+        if (pinnedTabId > 0) {
+          browser.tabs.remove(pinnedTabId);
+        }
+        break;
+      }
       default:
         break;
     }
@@ -78,3 +129,15 @@ browser.runtime.onMessage.addListener(onMessageListener);
 browser[browserAction].onClicked.addListener(toolbarIconClick);
 browser.tabs.onUpdated.addListener(tabUpdateHandler);
 browser.runtime.onInstalled.addListener(onInstalled);
+
+// async function createOffscreen() {
+//   if (await chrome.offscreen.hasDocument?.()) return;
+//   console.log('Creating offscreen');
+//   chrome.offscreen.createDocument({
+//     url: 'offscreen.html',
+//     reasons: ["AUDIO_PLAYBACK"],
+//     justification: 'keep service worker running for playing radio',
+//   });
+// }
+
+// createOffscreen();

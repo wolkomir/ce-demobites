@@ -22,12 +22,6 @@ export const isRegexExactMatch = (value: string, regexp: string) => {
   return res && res[0] && res[0] === res.input;
 };
 
-export const isLinkedinProfileUrl = (value: string) => {
-  const linkedInProfileURLRegExp =
-    '((https?:\\/\\/(www.)?)?linkedin.com\\/(mwlite\\/|m\\/)?in\\/[a-zA-Z0-9_.-]+\\/?)';
-  return !!isRegexExactMatch(value, linkedInProfileURLRegExp);
-};
-
 export const isValidPhoneNumber = (value: string) => {
   const validPhoneNumberRegExp = /^([+]\d{2})?\d{10}/;
   if (value.match(validPhoneNumberRegExp)) {

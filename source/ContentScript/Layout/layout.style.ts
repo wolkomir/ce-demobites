@@ -3,6 +3,7 @@ import { createStyles } from "@mantine/core";
 
 const useStyles = createStyles((theme, params) => ({
   wrapper: {
+    width: 400,
     position: "fixed",
     top: 10,
     right: 30,

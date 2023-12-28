@@ -1,7 +1,7 @@
 import browser from "webextension-polyfill";
 
 import * as BrowserStorage from "./storage";
-import { MESSAGE_ACTION } from "../Config";
+import { MESSAGE_ACTION, PERMISSIONS } from "../Config";
 import _ from "lodash";
 
 export const isFirefox = () =>
@@ -155,17 +155,26 @@ export const checkIsEmpty = (data:string):string =>{
   return ""
 }
 
-export const dateFormat = (timestamp:number): string=>{
+export const dateFormat = (timestamp:number): string=> {
+  const date = new Date(timestamp * 1000); // Multiply by 1000 to convert from seconds to milliseconds
+
+  const options:Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  };
+
+  return date.toLocaleDateString('en-US', options);
+}
+
+export const  getPermissionStatus = async (permissionName: string) => {
+  let status = PERMISSIONS.DENIED;
   
-const date = new Date(timestamp * 1000); // Multiply by 1000 to convert from seconds to milliseconds
-
-const options:Intl.DateTimeFormatOptions = {
-  year: 'numeric',
-  month: 'long',
-  day: 'numeric',
-};
-
-return date.toLocaleDateString('en-US', options);
-
-
+  try {
+    const permissionStatus = await navigator.permissions.query({name: permissionName});
+    status = permissionStatus.state;
+  } catch(error) {
+    console.log("Error while getPermissionStatus", error);
+  }
+  return status;
 }

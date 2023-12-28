@@ -29,7 +29,7 @@ const extensionReloaderPlugin = isDev
         // TODO: reload manifest on update
         contentScript: 'contentScript',
         background: 'background',
-        extensionPage: ['popup'],
+        extensionPage: ['popup', 'pinnedtab'],
       },
     })
   : () => {
@@ -64,7 +64,8 @@ module.exports = {
     manifest: path.join(sourcePath, 'manifest.json'),
     background: path.join(sourcePath, 'Background', 'index.ts'),
     contentScript: path.join(sourcePath, 'ContentScript', 'index.tsx'),
-    popup: path.join(sourcePath, 'Popup', 'index.tsx')
+    popup: path.join(sourcePath, 'Popup', 'index.tsx'),
+    pinnedtab: path.join(sourcePath, 'pinnedtab', 'index.tsx'),
   },
 
   output: {
@@ -177,6 +178,13 @@ module.exports = {
       chunks: ['popup'],
       hash: true,
       filename: 'popup.html',
+    }),
+    new HtmlWebpackPlugin({
+      template: path.join(viewsPath, 'pinnedtab.html'),
+      inject: 'body',
+      chunks: ['pinnedtab'],
+      hash: true,
+      filename: 'pinnedtab.html',
     }),
     // write css file(s) to build folder
     new MiniCssExtractPlugin({filename: 'css/[name].css'}),
