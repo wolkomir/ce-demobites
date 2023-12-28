@@ -9,7 +9,7 @@ const Popup = () => {
 
   let recorder:MediaRecorder|null = null;
   const data:Blob[] = [];
-  let intervalId = 0;
+  let intervalIdForKeepAlive = 0;
   let secondsRemainingToStopRecording: number = 0;
   let intervalId: number = 0;
 
@@ -129,13 +129,13 @@ const Popup = () => {
 
   useEffect(() => {
     browser.runtime.onMessage.addListener(onMessageListener)
-    intervalId = window.setInterval(() => {
+    intervalIdForKeepAlive = window.setInterval(() => {
        browser.runtime.sendMessage({action: 'keep_alive'});
     }, 15000);
     return () => {
       browser.runtime.onMessage.removeListener(onMessageListener)
-      if (intervalId > 0) {
-        window.clearInterval(intervalId)
+      if (intervalIdForKeepAlive > 0) {
+        window.clearInterval(intervalIdForKeepAlive)
       }
     }
   }, [])
