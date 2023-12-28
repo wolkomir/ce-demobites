@@ -21,6 +21,14 @@ let isWaitingForUploadOrDeletingRecording: boolean = false;
 let recordingData:Blob | null = null;
 let recordingInitiatedOnTabId: number = 0;
 
+const stopRecording = () => {
+  isRecording = false;
+  browser.tabs.sendMessage(pinnedTabId, {
+    action: MESSAGE_ACTION.STOP_RECORDING,
+  });
+  browser.action.setIcon({path: getImagePath("not-recording.png")});
+}
+
 const toolbarIconClick = async (tab: Tabs.Tab) => {
   console.log("toolbar button clicked", tab);
   try {
@@ -30,11 +38,7 @@ const toolbarIconClick = async (tab: Tabs.Tab) => {
     if (tab?.url && tab?.id) {
       if (tab.status === "complete") {
         if (isRecording) {
-          isRecording = false;
-          browser.tabs.sendMessage(pinnedTabId, {
-            action: MESSAGE_ACTION.STOP_RECORDING,
-          });
-          browser.action.setIcon({path: getImagePath("not-recording.png")});
+          stopRecording();
         } else {
           if (!isWaitingForUploadOrDeletingRecording) {
             await sentMessageToContentScript(tab.id, MESSAGE_ACTION.TOGGLE_POPUP);
@@ -51,6 +55,24 @@ const toolbarIconClick = async (tab: Tabs.Tab) => {
     
   }
 };
+
+const fetchSetupData = async () => {
+  try {
+    const response = await fetch(API_URL.SETUP, {
+      method: 'POST',
+      body: JSON.stringify({[PARAMETER_KEY.CID]: "1234567"})
+    });
+    const jsonResponse = await response.json();
+    if (jsonResponse[PARAMETER_KEY.STATE] === 'ok') {
+      return {success: true, error: null, maxDurationInSeconds: jsonResponse[PARAMETER_KEY.MAX_DURATION]};
+    } else {
+      return {success: false, error: "Something went wrong. Please try again."};
+    }
+  } catch(error) {
+    console.log({error})
+    return {success: false, error: "Something went wrong. Please try again."};
+  }
+}
 
 const uploadRecordingData = async (data: Blob) => {
   try {
@@ -109,13 +131,19 @@ const onMessageListener = async (
         }
         break;
       }
+      case MESSAGE_ACTION.GET_SETUP_DATA: {
+        sendResponse({status: true});
+        const response = await fetchSetupData();
+        console.log({response});
+        return response;
+      }
       case MESSAGE_ACTION.START_RECORDING: {
         const targetTabId = sender.tab?.id;
         if (!targetTabId) {
           break;
         }
         recordingInitiatedOnTabId = targetTabId;
-        const {selectedMicrophoneDeviceId} = msg.data;
+        const {selectedMicrophoneDeviceId, maxDurationInSeconds} = msg.data;
         chrome.tabCapture.getMediaStreamId({
           targetTabId
         }, async (streamId) => {
@@ -135,14 +163,26 @@ const onMessageListener = async (
               action: MESSAGE_ACTION.START_RECORDING,
               data: {
                 streamId,
-                selectedMicrophoneDeviceId
+                selectedMicrophoneDeviceId,
+                maxDurationInSeconds
               }
             });
           }, 1000);
         });
         break;
       }
+      case MESSAGE_ACTION.RECORDING_TIME_REMAINING: {
+        const {secondsRemainingToStopRecording} = msg.data;
+        browser.action.setBadgeText({
+          text: `${secondsRemainingToStopRecording}`
+        });
+        break;
+      }
       case MESSAGE_ACTION.STOP_RECORDING: {
+        browser.action.setBadgeText({
+          text: ''
+        });
+        stopRecording();
         break;
       }
       case MESSAGE_ACTION.RECORDING_COMPLETED: {

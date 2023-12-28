@@ -11,6 +11,8 @@ export enum MESSAGE_ACTION {
   UPLOAD_RECORDING = "UPLOAD_RECORDING",
   DELETE_RECORDING = "DELETE_RECORDING",
   UPLOAD_RECORDING_COMPLETED = "UPLOAD_RECORDING_COMPLETED",
+  GET_SETUP_DATA = "GET_SETUP_DATA",
+  RECORDING_TIME_REMAINING = "RECORDING_TIME_REMAINING",
 }
 
 export const PARAMETER_KEY = {
@@ -18,6 +20,7 @@ export const PARAMETER_KEY = {
   STATE: 'state',
   PRE_SIGNED_URL_JSON_INTERACTION_DATA: 'pre-signed-url-json-interaction-data',
   PRE_SIGNED_URL_VIDEO_FILE: 'pre-signed-url-video-file',
+  MAX_DURATION: 'max-duration',
 };
 
 export interface Message {

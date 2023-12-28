@@ -41,6 +41,7 @@ const Layout = () => {
   const [selectedMicrophoneDeviceId, setSelectedMicrophoneDeviceId] = useState<string | null>(NoMicrophone.value);
   const [isLoading, setLoading] = useState(true);
   const [currentState, setCurrentState] = useState<State>(State.Initial);
+  const [maxDurationInSeconds, setMaxDurationInSeconds] = useState(0);
   
   const onMessageListener = async (msg: Message) => {
     console.log({ msg });
@@ -116,6 +117,19 @@ const Layout = () => {
     }
   }
 
+  const fetchSetupData = async () => {
+    const setupDataResponse = await browser.runtime.sendMessage({action: MESSAGE_ACTION.GET_SETUP_DATA});
+    console.log({setupDataResponse})
+    const {success, error} = setupDataResponse;
+    if (success) {
+      setMaxDurationInSeconds(setupDataResponse.maxDurationInSeconds);
+      checkMicrophonePermission();
+    } else {
+      setWillShowPopup(false);
+      alert(error);
+    }
+  }
+
   useEffect(() => {
     browser.runtime.onMessage.addListener(onMessageListener);
     return () => {
@@ -126,7 +140,7 @@ const Layout = () => {
   useEffect(() => {
     if (willShowPopup) {
       setLoading(true);
-      checkMicrophonePermission();
+      fetchSetupData();
     }
   }, [willShowPopup])
 
@@ -138,7 +152,7 @@ const Layout = () => {
 
   const startRecording = () => {
     setWillShowPopup(false);
-    browser.runtime.sendMessage({action: MESSAGE_ACTION.START_RECORDING, data: {selectedMicrophoneDeviceId}});
+    browser.runtime.sendMessage({action: MESSAGE_ACTION.START_RECORDING, data: {selectedMicrophoneDeviceId, maxDurationInSeconds}});
   }
 
   const uploadRecording = () => {

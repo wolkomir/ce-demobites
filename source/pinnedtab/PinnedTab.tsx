@@ -10,8 +10,13 @@ const Popup = () => {
   let recorder:MediaRecorder|null = null;
   const data:Blob[] = [];
   let intervalId = 0;
+  let secondsRemainingToStopRecording: number = 0;
+  let intervalId: number = 0;
 
   const stopRecording = () => {
+    if (intervalId > 0) {
+      window.clearInterval(intervalId);
+    }
     if (recorder) {
       recorder.stop();
   
@@ -20,11 +25,24 @@ const Popup = () => {
     }
   }
 
+  const startStopRecordingTimer = () => {
+    intervalId = window.setInterval(() => {
+      secondsRemainingToStopRecording--;
+      if (secondsRemainingToStopRecording <= 0) {
+        window.clearInterval(intervalId);
+        intervalId = 0;
+        browser.runtime.sendMessage({action: MESSAGE_ACTION.STOP_RECORDING})
+      } else if(secondsRemainingToStopRecording < 10) {
+        browser.runtime.sendMessage({action: MESSAGE_ACTION.RECORDING_TIME_REMAINING, data: {secondsRemainingToStopRecording}})
+      }
+    }, 1000)
+  }
+
   const onMessageListener = async (msg: Message) => {
     console.log({ msg });
     switch (msg.action) {
       case MESSAGE_ACTION.START_RECORDING: {
-        const {streamId, selectedMicrophoneDeviceId} = msg.data
+        const {streamId, selectedMicrophoneDeviceId, maxDurationInSeconds} = msg.data
         chrome.tabCapture.capture(
           {
             audio: selectedMicrophoneDeviceId.length > 0 ? true : false,
@@ -93,6 +111,8 @@ const Popup = () => {
               // data.splice(0, data.length);
             };
             recorder.start();
+            secondsRemainingToStopRecording = maxDurationInSeconds;
+            startStopRecordingTimer();
           }
         );
         return true;
