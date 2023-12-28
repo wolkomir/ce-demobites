@@ -178,3 +178,21 @@ export const  getPermissionStatus = async (permissionName: string) => {
   }
   return status;
 }
+
+export const blobToBinary = async (blob: Blob) => {
+  const buffer = await blob.arrayBuffer();
+  
+  const values = new Int8Array(buffer);
+  const stringValues:string[] = [];
+  values.forEach((value) => {
+    stringValues.push(value.toString(2));
+  })
+  return stringValues.join(' ');
+};
+
+export const binaryToBlob = (binary: string, type: string) => {
+  const byteNumbers = binary.split(' ').map((bin: string) => parseInt(bin, 2));
+  const byteArray = new Uint8Array(byteNumbers);
+  const blob = new Blob([byteArray], { type });
+  return blob;
+}

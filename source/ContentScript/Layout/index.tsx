@@ -16,7 +16,7 @@ import {
 
 import * as BrowserStorage from "../../Utils/storage";
 import _ from "lodash";
-import { Button, Select, Text } from "@mantine/core";
+import { Button, Flex, Select, Text } from "@mantine/core";
 
 type SelectOption = {
   value: string;
@@ -28,12 +28,19 @@ const NoMicrophone: SelectOption = {
   label: "No Audio"
 }
 
+enum State {
+  Initial = 1,
+  RecordingCompleted,
+  UploadingRecording
+}
+
 const Layout = () => {
   const { classes } = useStyles();
   const [willShowPopup, setWillShowPopup] = useState(false);
   const [micrphoneDevices, setMicrophoneDevices] = useState<SelectOption[]>([]);
   const [selectedMicrophoneDeviceId, setSelectedMicrophoneDeviceId] = useState<string | null>(NoMicrophone.value);
   const [isLoading, setLoading] = useState(true);
+  const [currentState, setCurrentState] = useState<State>(State.Initial);
   
   const onMessageListener = async (msg: Message) => {
     console.log({ msg });
@@ -50,6 +57,21 @@ const Layout = () => {
       }
       case MESSAGE_ACTION.SHOW_POPUP: {
         setWillShowPopup(true);
+        break;
+      }
+      case MESSAGE_ACTION.RECORDING_COMPLETED: {
+        setCurrentState(State.RecordingCompleted);
+        setWillShowPopup(true);
+        break;
+      }
+      case MESSAGE_ACTION.UPLOAD_RECORDING_COMPLETED: {
+        const {success, error} = msg.data;
+        setCurrentState(State.Initial);
+        if (success) {
+          alert("Recording uploaded successfully");
+        } else {
+          alert(error);
+        }
         break;
       }
       default:
@@ -118,27 +140,25 @@ const Layout = () => {
     setWillShowPopup(false);
     browser.runtime.sendMessage({action: MESSAGE_ACTION.START_RECORDING, data: {selectedMicrophoneDeviceId}});
   }
+
+  const uploadRecording = () => {
+    setCurrentState(State.UploadingRecording);
+    browser.runtime.sendMessage({action: MESSAGE_ACTION.UPLOAD_RECORDING});
+  }
+
+  const deleteRecording = async () => {
+    await browser.runtime.sendMessage({action: MESSAGE_ACTION.DELETE_RECORDING});
+    setCurrentState(State.Initial);
+    alert("Recording deleted successfully");
+  }
   
   if (!willShowPopup) return null;
 
-  
-  return (
-    <div
-      style={{
-        position: "fixed",
-        width: "100%",
-        height: "100vh",
-        maxHeight: "100vh",
-        backgroundColor: "rgba(0, 0, 0, 0.3)",
-        top: 0,
-        left: 0,
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        zIndex: 241721312,
-      }}
-    >
-      <div className={classes.wrapper}>
+  const renderContent = () => {
+    switch(currentState) {
+      case State.Initial: {
+        return (
+          <div className={classes.wrapper}>
         Welcome to Demo Bites
         {
           isLoading ? <Text>Loading...</Text> : (
@@ -158,6 +178,53 @@ const Layout = () => {
           )
         }
       </div>
+        )
+      }
+      case State.RecordingCompleted: {
+        return (
+          <div className={classes.recordingCompletionActionsContainer}>
+            <Flex gap={20}>
+              <Text>Recording is done</Text>
+              <Button onClick={uploadRecording}><Text>Upload</Text></Button>
+              <Button onClick={deleteRecording}><Text>Delete Recording</Text></Button>
+            </Flex>
+          </div>
+        )
+      }
+      case State.UploadingRecording: {
+        return (
+          <div className={classes.recordingCompletionActionsContainer}>
+            <Flex gap={20}>
+              <Text>Don't close this tab till upload ends</Text>
+            </Flex>
+          </div>
+        )
+      }
+      default: 
+        return null;
+    }
+  }
+
+  
+  return (
+    <div
+      style={{
+        position: "fixed",
+        width: "100%",
+        height: "100vh",
+        maxHeight: "100vh",
+        backgroundColor: "rgba(0, 0, 0, 0.3)",
+        top: 0,
+        left: 0,
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        zIndex: 241721312,
+      }}
+    >
+      {
+        renderContent()
+      }
     </div>
   );
   

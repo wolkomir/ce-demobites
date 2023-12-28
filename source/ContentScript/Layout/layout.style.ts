@@ -16,6 +16,18 @@ const useStyles = createStyles((theme, params) => ({
     padding: 20,
     color: "blue"
   },
+  recordingCompletionActionsContainer: {
+    width: 400,
+    position: "fixed",
+    zIndex: 2147483646,
+    backgroundColor: "white",
+    borderRadius: 8,
+    borderColor: 'blue',
+    borderWidth: 2,
+    borderStyle: "solid",
+    padding: 20,
+    color: "blue"
+  },
   container: {
     backgroundColor: "#FFF",
     display: "flex",

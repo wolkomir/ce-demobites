@@ -3,11 +3,12 @@ import browser from 'webextension-polyfill';
 
 import './styles.scss';
 import { MESSAGE_ACTION, Message } from '../Config';
+import { blobToBinary } from '../Utils/extensionUtils';
 
 const Popup = () => {
 
   let recorder:MediaRecorder|null = null;
-  const data:any[] = [];
+  const data:Blob[] = [];
   let intervalId = 0;
 
   const stopRecording = () => {
@@ -78,18 +79,18 @@ const Popup = () => {
               {mimeType: 'video/webm'}
             );
             recorder.ondataavailable = (event: any) => data.push(event.data);
-            recorder.onstop = () => {
+            recorder.onstop = async () => {
               const blob = new Blob(data, {type: 'video/webm'});
-              window.open(URL.createObjectURL(blob), '_blank');
+              // window.open(URL.createObjectURL(blob), '_blank');
               // tabMediaStream!.getTracks().forEach((track) => track.stop());
               // desktopAudioStream.getTracks().forEach((track) => track.stop());
               mediaStreamTracks.forEach((track) => track.stop());
               // Clear state ready for next recording
               recorder = null;
-              data.splice(0, data.length);
-              setTimeout(() => {
-                browser.runtime.sendMessage({action: MESSAGE_ACTION.RECORDING_COMPLETED})
-              }, 3000);
+              const binaryData = await blobToBinary(blob);
+              console.log({dataInPinnedTab: data, binaryData})
+              browser.runtime.sendMessage({action: MESSAGE_ACTION.RECORDING_COMPLETED, data: binaryData})
+              // data.splice(0, data.length);
             };
             recorder.start();
           }
