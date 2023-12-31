@@ -10,8 +10,6 @@ import Layout from './Layout';
 import {Message, MESSAGE_ACTION} from '../Config';
 import {CustomFonts} from './customFonts';
 
-console.log('🦄', 'helloworld from content script and hot reloading');
-
 const extensionContainer = document.createElement('div');
 extensionContainer.id = 'linkedin-assistance-extension';
 extensionContainer.setAttribute(

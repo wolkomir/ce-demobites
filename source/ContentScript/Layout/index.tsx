@@ -8,13 +8,10 @@ import {
   MESSAGE_ACTION,
   PERMISSIONS,
 } from "../../Config";
-import { getImagePath, sleep } from "../../Utils";
 import {
   getPermissionStatus,
-  sendMessageToExtensionPages,
 } from "../../Utils/extensionUtils";
 
-import * as BrowserStorage from "../../Utils/storage";
 import _ from "lodash";
 import { Button, Flex, Select, Text } from "@mantine/core";
 
@@ -30,22 +27,35 @@ const NoMicrophone: SelectOption = {
 
 enum State {
   Initial = 1,
+  ProcessingRecording,
   RecordingCompleted,
   UploadingRecording
 }
+
+const PERMISSION_IFRAME_ID = "demobites_permissionsIFrame";
 
 const Layout = () => {
   const { classes } = useStyles();
   const [willShowPopup, setWillShowPopup] = useState(false);
   const [micrphoneDevices, setMicrophoneDevices] = useState<SelectOption[]>([]);
-  const [selectedMicrophoneDeviceId, setSelectedMicrophoneDeviceId] = useState<string | null>(NoMicrophone.value);
+  const [selectedMicrophoneDeviceLabel, setSelectedMicrophoneDeviceLabel] = useState<string | null>(NoMicrophone.value);
   const [isLoading, setLoading] = useState(true);
   const [currentState, setCurrentState] = useState<State>(State.Initial);
   const [maxDurationInSeconds, setMaxDurationInSeconds] = useState(0);
   
   const onMessageListener = async (msg: Message) => {
-    console.log({ msg });
     switch (msg.action) {
+      case MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_GRANTED: {
+        // getMicrophoneDevices();
+        const {microphoneDevices} = msg.data;
+        setSelectedMicrophoneDeviceLabel(microphoneDevices.length > 0 ? microphoneDevices[0].value : NoMicrophone.value)
+        setMicrophoneDevices([...microphoneDevices, NoMicrophone]);
+        return true;
+      }
+      case MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_DENIED: {
+        setMicrophoneDevices([NoMicrophone]);
+        return true;
+      }
       case MESSAGE_ACTION.TOGGLE_POPUP: {
         setWillShowPopup((prev) => {
           return !prev;
@@ -60,6 +70,21 @@ const Layout = () => {
         setWillShowPopup(true);
         break;
       }
+      case MESSAGE_ACTION.RECORDING_STOPPED_BEFORE_STARTING: {
+        setWillShowPopup(true);
+        break;
+      }
+      case MESSAGE_ACTION.RECORDING_CANCELLED: {
+        const {error} = msg.data;
+        alert(error)
+        setWillShowPopup(true);
+        break;
+      }
+      case MESSAGE_ACTION.PROCESSING_RECORDING: {
+        setCurrentState(State.ProcessingRecording);
+        setWillShowPopup(true);
+        break;
+      }
       case MESSAGE_ACTION.RECORDING_COMPLETED: {
         setCurrentState(State.RecordingCompleted);
         setWillShowPopup(true);
@@ -67,11 +92,14 @@ const Layout = () => {
       }
       case MESSAGE_ACTION.UPLOAD_RECORDING_COMPLETED: {
         const {success, error} = msg.data;
-        setCurrentState(State.Initial);
         if (success) {
-          alert("Recording uploaded successfully");
+          setWillShowPopup(false);
+          setCurrentState(State.Initial);
+          setTimeout(() => {
+            alert("Recording uploaded successfully");  
+          }, 0);
         } else {
-          alert(error);
+          alert(error ? error : "Some error occurred. Please try again later.");
         }
         break;
       }
@@ -81,68 +109,63 @@ const Layout = () => {
     return true;
   };
 
-  const getMicrophoneDevices = async () => {
-    const devices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.label);
-    const audioDevices = [NoMicrophone];
-    devices.forEach((device) => {
-      if (device.kind == "audioinput") {
-        audioDevices.push({ label: device.label, value: device.deviceId});
-      }
-    });
-    console.log({audioDevices})
-    setSelectedMicrophoneDeviceId(audioDevices.length > 1 ? audioDevices[1].value : NoMicrophone.value)
-    setMicrophoneDevices(audioDevices);
+  const askForMicrophonePermission = async () => {
+    removePermissionIframeIfExists();
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("hidden", "hidden");
+    iframe.setAttribute("id", PERMISSION_IFRAME_ID);
+    iframe.setAttribute("allow", "microphone");
+    iframe.src = chrome.runtime.getURL("assets/requestPermission.html");
+    document.body.appendChild(iframe);
   }
 
-  const askForMicrophonePermission = () => {
-    navigator.mediaDevices
-        .getUserMedia({audio: true})
-        .then(() => {
-          getMicrophoneDevices();
-        })
-        .catch((error: any) => {
-          console.log("Error while getting microphone access", error)
-        })
-  }
-
-  const checkMicrophonePermission = async () => {
-    const microphonePermissionStatus = await getPermissionStatus(DEVICES.MICROPHONE);
-    console.log({microphonePermissionStatus})
-    if (microphonePermissionStatus === PERMISSIONS.GRANTED) {
-      getMicrophoneDevices();
-    } else if (microphonePermissionStatus === PERMISSIONS.PROMPT) {
-      askForMicrophonePermission();
-    } else {
-      setMicrophoneDevices([NoMicrophone]);
+  const removePermissionIframeIfExists = () => {
+    const existingIframe = document.getElementById(PERMISSION_IFRAME_ID);
+    if (existingIframe) {
+      existingIframe.remove();
     }
   }
 
   const fetchSetupData = async () => {
     const setupDataResponse = await browser.runtime.sendMessage({action: MESSAGE_ACTION.GET_SETUP_DATA});
-    console.log({setupDataResponse})
     const {success, error} = setupDataResponse;
     if (success) {
-      setMaxDurationInSeconds(setupDataResponse.maxDurationInSeconds);
-      checkMicrophonePermission();
+      setMaxDurationInSeconds(parseInt(setupDataResponse.maxDurationInSeconds, 10));
+      askForMicrophonePermission();
     } else {
-      setWillShowPopup(false);
-      alert(error);
+      if (error) {
+        setWillShowPopup(false);
+        alert(error);
+      } else {
+        fetchSetupData();
+      }
     }
   }
 
   useEffect(() => {
     browser.runtime.onMessage.addListener(onMessageListener);
+    browser.runtime.sendMessage({action: MESSAGE_ACTION.RESET_RECORDING_SESSION_IF_NOT_RECORDING});
     return () => {
       browser.runtime.onMessage.removeListener(onMessageListener);
     };
   }, []);
 
   useEffect(() => {
-    if (willShowPopup) {
+    if (willShowPopup && maxDurationInSeconds === 0) {
       setLoading(true);
       fetchSetupData();
+      setTimeout(() => {
+        if (willShowPopup) {
+          const existingIframe = document.getElementById(PERMISSION_IFRAME_ID);
+          if (!existingIframe) {
+            askForMicrophonePermission();
+          }
+        }
+      }, 3000);
+    } else if (!willShowPopup) {
+      removePermissionIframeIfExists();
     }
-  }, [willShowPopup])
+  }, [willShowPopup, maxDurationInSeconds])
 
   useEffect(() => {
     if (micrphoneDevices.length > 0) {
@@ -152,7 +175,7 @@ const Layout = () => {
 
   const startRecording = () => {
     setWillShowPopup(false);
-    browser.runtime.sendMessage({action: MESSAGE_ACTION.START_RECORDING, data: {selectedMicrophoneDeviceId, maxDurationInSeconds}});
+    browser.runtime.sendMessage({action: MESSAGE_ACTION.START_RECORDING, data: {selectedMicrophoneDeviceLabel, maxDurationInSeconds}});
   }
 
   const uploadRecording = () => {
@@ -172,26 +195,35 @@ const Layout = () => {
     switch(currentState) {
       case State.Initial: {
         return (
-          <div className={classes.wrapper}>
-        Welcome to Demo Bites
-        {
-          isLoading ? <Text>Loading...</Text> : (
-            <>
-            <Select
-              data={micrphoneDevices}
-              label="Microphone"
-              placeholder="Select a Microphone"
-              defaultValue={micrphoneDevices.length > 1 ? micrphoneDevices[1].value : NoMicrophone.value}
-              checked
-              mt={20}
-              mb={20}
-              onChange={setSelectedMicrophoneDeviceId}
-            />
-            <Button onClick={startRecording}><Text>Record</Text></Button>
-            </>
-          )
-        }
-      </div>
+          <div className={classes.wrapper} onClick={(event) => {event.stopPropagation()}}>
+            <Text size={20} weight={"bold"}>Welcome to Demo Bites</Text>
+            {
+              isLoading ? <Text size={16} mt={10}>Loading...</Text> : (
+                <>
+                <Select
+                  data={micrphoneDevices}
+                  label="Microphone"
+                  placeholder="Select a Microphone"
+                  defaultValue={micrphoneDevices.length > 1 ? micrphoneDevices[1].value : NoMicrophone.value}
+                  checked
+                  mt={20}
+                  mb={20}
+                  onChange={setSelectedMicrophoneDeviceLabel}
+                />
+                <Button onClick={startRecording}><Text>Record</Text></Button>
+                </>
+              )
+            }
+          </div>
+        )
+      }
+      case State.ProcessingRecording: {
+        return (
+          <div className={classes.recordingCompletionActionsContainer}>
+            <Flex gap={20}>
+              <Text>Processing Recording...</Text>
+            </Flex>
+          </div>
         )
       }
       case State.RecordingCompleted: {
@@ -227,13 +259,18 @@ const Layout = () => {
         width: "100%",
         height: "100vh",
         maxHeight: "100vh",
-        backgroundColor: "rgba(0, 0, 0, 0.3)",
+        backgroundColor: `${currentState === State.Initial ? "transparent" : "rgba(0, 0, 0, 0.3)"}`,
         top: 0,
         left: 0,
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
         zIndex: 241721312,
+      }}
+      onClick={() => {
+        if (currentState === State.Initial) {
+          setWillShowPopup(false);
+        }
       }}
     >
       {

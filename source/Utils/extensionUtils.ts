@@ -18,6 +18,17 @@ export const getActiveTab = async () => {
   return (tabs && tabs.length > 0 && tabs[0]) || null;
 };
 
+export function showNotification(title = "This tab is not recordable", message = "We will not be able to record this tab. Please choose other tab.") {
+  const options = {
+    type: "basic" as browser.Notifications.TemplateType,
+    iconUrl: browser.runtime.getURL("assets/Icons/icon-128.png"),
+    title,
+    message,
+  };
+  let id = "demobites_" + new Date().getTime();
+  browser.notifications.create(id, options);
+}
+
 export const handleContentScriptInjection = async (
   tabId: number,
   url: string
@@ -28,10 +39,8 @@ export const handleContentScriptInjection = async (
       return false;
     }
     let isInjected = await isScriptInjected(tabId);
-    console.log("isInjected:::", isInjected);
     return true;
   } catch (e: any) {
-    console.log("handle tab injectContentScript error ::::", e.message);
     await injectContentScript(tabId);
     return true;
   }
@@ -65,7 +74,6 @@ export const isScriptInjected = (tabId: number) => {
       { action: MESSAGE_ACTION.IS_SCRIPT_INJECTED }
     );
   } catch (e) {
-    console.log("Content script sent message error : ", e);
     return null;
   }
 };
@@ -132,7 +140,7 @@ const blockedPrefixes = [
 export const isScriptableUrl = (url: string) => {
   if (!url || !url.startsWith("http")) return false;
   const cleanUrl = url.replace(/^https?:\/\//, "");
-  return blockedPrefixes.every((blocked) => !cleanUrl.startsWith(blocked));
+  return !(blockedPrefixes.some((blocked) => cleanUrl.startsWith(blocked)));
 };
 
 export const handleUpdateUserInfo = async (
@@ -140,7 +148,6 @@ export const handleUpdateUserInfo = async (
   data = {}
 ) => {
   try {
-    console.log({ action, data });
     // return browser.runtime.sendMessage({ action, data });
   } catch (e) {
     console.error("update user info : ", e);
@@ -174,7 +181,7 @@ export const  getPermissionStatus = async (permissionName: string) => {
     const permissionStatus = await navigator.permissions.query({name: permissionName as PermissionName});
     status = permissionStatus.state;
   } catch(error) {
-    console.log("Error while getPermissionStatus", error);
+    
   }
   return status;
 }

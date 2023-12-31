@@ -1,17 +1,22 @@
 import React, {useEffect} from 'react';
 import browser from 'webextension-polyfill';
+import fixWebmDuration from "fix-webm-duration";
 
 import './styles.scss';
 import { MESSAGE_ACTION, Message } from '../Config';
 import { blobToBinary } from '../Utils/extensionUtils';
 
-const Popup = () => {
+const MAXIMUM_LENGTH_OF_BINARY_DATA = 45000000;
+
+
+const PinnedTab = () => {
 
   let recorder:MediaRecorder|null = null;
   const data:Blob[] = [];
   let intervalIdForKeepAlive = 0;
-  let secondsRemainingToStopRecording: number = 0;
+  let maximumDurationInSeconds: number = 0;
   let intervalId: number = 0;
+  let startTime: number = 0;
 
   const stopRecording = () => {
     if (intervalId > 0) {
@@ -25,9 +30,17 @@ const Popup = () => {
     }
   }
 
+  const cancelRecording = () => {
+    if (recorder) {
+      recorder.onstop = null;
+      stopRecording();
+    }
+  }
+
   const startStopRecordingTimer = () => {
     intervalId = window.setInterval(() => {
-      secondsRemainingToStopRecording--;
+      const currentTime = Date.now();
+      const secondsRemainingToStopRecording = Math.ceil(maximumDurationInSeconds - (currentTime-startTime)/1000);
       if (secondsRemainingToStopRecording <= 0) {
         window.clearInterval(intervalId);
         intervalId = 0;
@@ -39,86 +52,117 @@ const Popup = () => {
   }
 
   const onMessageListener = async (msg: Message) => {
-    console.log({ msg });
     switch (msg.action) {
       case MESSAGE_ACTION.START_RECORDING: {
-        const {streamId, selectedMicrophoneDeviceId, maxDurationInSeconds} = msg.data
-        chrome.tabCapture.capture(
-          {
-            audio: selectedMicrophoneDeviceId.length > 0 ? true : false,
-            video: true,
-            videoConstraints: {
-              mandatory: {
-                chromeMediaSource: 'tab',
-                chromeMediaSourceId: streamId,
-                minFrameRate: 20,
-                maxFrameRate: 30,
-              },
-            },
-          },
-          async (tabMediaStream) => {
-            console.log({tabMediaStream});
-            const mediaStreamTracks: MediaStreamTrack[] = [];
-            if (tabMediaStream) {
-              mediaStreamTracks.push(...tabMediaStream.getVideoTracks());
-            }
-            if (selectedMicrophoneDeviceId.length > 0) {
-              const desktopAudioStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                  deviceId:  {exact: selectedMicrophoneDeviceId},
-                  autoGainControl: true,
-                  echoCancellation: true,
-                  noiseSuppression: true,
+        data.splice(0, data.length);
+        const {selectedMicrophoneDeviceLabel, maxDurationInSeconds, targetTabId} = msg.data
+        chrome.tabCapture.getMediaStreamId({
+            targetTabId
+          }, async (streamId) => {
+            chrome.tabCapture.capture(
+              {
+                audio: selectedMicrophoneDeviceLabel.length > 0 ? true : false,
+                video: true,
+                videoConstraints: {
+                  mandatory: {
+                    chromeMediaSource: 'tab',
+                    chromeMediaSourceId: streamId,
+                    minFrameRate: 20,
+                    maxFrameRate: 30,
+                    maxWidth: 1920,
+                    maxHeight: 1080,
+                  },
                 },
-                video: false,
-              });
-              console.log({desktopAudioStream});
-  
-              const audioTracks = desktopAudioStream.getAudioTracks();
+              },
+              async (tabMediaStream) => {
+                const mediaStreamTracks: MediaStreamTrack[] = [];
+                if (tabMediaStream) {
+                  mediaStreamTracks.push(...tabMediaStream.getVideoTracks());
+                }
+                
+                const devices = (await navigator.mediaDevices.enumerateDevices()).filter((device) => device.label);
+                const selectedDevice = devices.find((device) => device.label === selectedMicrophoneDeviceLabel);
+                const deviceId = selectedDevice ? selectedDevice.deviceId : "";
+                if (deviceId.length > 0) {
+                  try {
+                    
+                    const desktopAudioStream = await window.navigator.mediaDevices.getUserMedia({
+                      audio: {
+                        deviceId:  {exact: deviceId},
+                        autoGainControl: true,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                      },
+                      video: false,
+                    });
+                    
+                    const audioTracks = desktopAudioStream.getAudioTracks();
+          
+                    const audioContext = new AudioContext();
+                    const destination = audioContext.createMediaStreamDestination();
+                    // Add each audio track from sourceStream to destinationStream
+                    audioTracks.forEach((track) => {
+                      // tabMediaStream!.addTrack(track);
+                      mediaStreamTracks.push(track);
+                      const mediaSource = audioContext.createMediaStreamSource(
+                        new MediaStream([track])
+                      );
+                      mediaSource.connect(destination);
+                    });
+                  } catch(error) {
+                    browser.runtime.sendMessage({action: MESSAGE_ACTION.RECORDING_CANCELLED, data: {error: "Recording cancelled. You might have not allowed to record audio."}})
+                    return;
+                  }
+                }
     
-              const audioContext = new AudioContext();
-              const destination = audioContext.createMediaStreamDestination();
-              // Add each audio track from sourceStream to destinationStream
-              audioTracks.forEach((track) => {
-                // tabMediaStream!.addTrack(track);
-                mediaStreamTracks.push(track);
-                console.log('Audio track added to the destination stream:', track);
-                const mediaSource = audioContext.createMediaStreamSource(
-                  new MediaStream([track])
+                recorder = new MediaRecorder(
+                  new MediaStream(mediaStreamTracks),
+                  {mimeType: 'video/webm'}
+                  // {
+                  //   audioBitsPerSecond: 128000,
+                  //   videoBitsPerSecond: 2500000,
+                  //   mimeType: 'video/x-matroska;codecs=avc1',
+                  // }
                 );
-                mediaSource.connect(destination);
-              });
-            }
-            
-  
-            recorder = new MediaRecorder(
-              new MediaStream(mediaStreamTracks),
-              // tabMediaStream,
-              {mimeType: 'video/webm'}
+                recorder.ondataavailable = (event: any) => data.push(event.data);
+                recorder.onstart = () => {
+                  startTime = Date.now();
+                  browser.runtime.sendMessage({action: MESSAGE_ACTION.RECORDING_STARTED})
+                  
+                }
+                recorder.onstop = async () => {
+                  const duration = Date.now() - startTime;
+                  const blobWithoutDuration = new Blob(data, {type: 'video/webm'});
+                  const blob = await fixWebmDuration(blobWithoutDuration, duration, {logger: false});
+                  
+                  mediaStreamTracks.forEach((track) => track.stop());
+                  recorder = null;
+                  const binaryData = await blobToBinary(blob);
+                  const binaryDataParts:string[] = [];
+                  for (let i = 0; i < binaryData.length; i += MAXIMUM_LENGTH_OF_BINARY_DATA) {
+                    binaryDataParts.push(binaryData.substring(i, i + MAXIMUM_LENGTH_OF_BINARY_DATA));
+                  }
+                  for (let i = 0; i < binaryDataParts.length; i++) {
+                    setTimeout(() => {
+                      browser.runtime.sendMessage({action: MESSAGE_ACTION.RECORDING_COMPLETED, data: {blobUrl: URL.createObjectURL(blob), binaryData:binaryDataParts[i], binaryDataPart: i, binaryDataTotalParts: binaryDataParts.length, binaryDataLength: binaryData.length}});  
+                    }, 50);
+                  }
+                };
+                maximumDurationInSeconds = maxDurationInSeconds;
+                recorder.start();
+                startStopRecordingTimer();
+              }
             );
-            recorder.ondataavailable = (event: any) => data.push(event.data);
-            recorder.onstop = async () => {
-              const blob = new Blob(data, {type: 'video/webm'});
-              // window.open(URL.createObjectURL(blob), '_blank');
-              // tabMediaStream!.getTracks().forEach((track) => track.stop());
-              // desktopAudioStream.getTracks().forEach((track) => track.stop());
-              mediaStreamTracks.forEach((track) => track.stop());
-              // Clear state ready for next recording
-              recorder = null;
-              const binaryData = await blobToBinary(blob);
-              console.log({dataInPinnedTab: data, binaryData})
-              browser.runtime.sendMessage({action: MESSAGE_ACTION.RECORDING_COMPLETED, data: binaryData})
-              // data.splice(0, data.length);
-            };
-            recorder.start();
-            secondsRemainingToStopRecording = maxDurationInSeconds;
-            startStopRecordingTimer();
-          }
-        );
+          });
+        
         return true;
       }
       case MESSAGE_ACTION.STOP_RECORDING: {
         stopRecording();
+        break;
+      }
+      case MESSAGE_ACTION.CANCEL_RECORDING: {
+        cancelRecording();
         break;
       }
       default:
@@ -148,4 +192,4 @@ const Popup = () => {
   );
 };
 
-export default Popup;
+export default PinnedTab;

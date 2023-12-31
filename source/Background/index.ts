@@ -12,6 +12,9 @@ import {
   sendMessageToAllTab,
   handleContentScriptInjection,
   binaryToBlob,
+  getActiveTab,
+  showNotification,
+  isScriptableUrl,
 } from "../Utils/extensionUtils";
 import { getImagePath } from "../Utils";
 
@@ -20,36 +23,78 @@ let pinnedTabId:number = 0;
 let isWaitingForUploadOrDeletingRecording: boolean = false;
 let recordingData:Blob | null = null;
 let recordingInitiatedOnTabId: number = 0;
+let recordingInitiatedOnWindowId: number = 0;
+let recordingBinaryDataParts: string[] = [];
+let recordingBinaryDataPartsRecieved: number = 0;
+let lastTabIdExtensionClickedOn = 0;
+
+const focusThRecordingTab = () => {
+  browser.windows.update(recordingInitiatedOnWindowId, {focused: true})
+  browser.tabs.update(recordingInitiatedOnTabId, {
+    active: true,
+  })
+}
 
 const stopRecording = () => {
+  isWaitingForUploadOrDeletingRecording = true;
+  browser.tabs.sendMessage(recordingInitiatedOnTabId, {
+    action: MESSAGE_ACTION.PROCESSING_RECORDING,
+  });
+  focusThRecordingTab();
   isRecording = false;
   browser.tabs.sendMessage(pinnedTabId, {
     action: MESSAGE_ACTION.STOP_RECORDING,
   });
   browser.action.setIcon({path: getImagePath("not-recording.png")});
+  browser.action.setBadgeText({
+    text: ''
+  });
+}
+
+const showTabNotRecordableNotification = () => {
+  showNotification();
+}
+
+const sendTogglePopupMessage = (tabId: number) => {
+  try {
+    sentMessageToContentScript(tabId, MESSAGE_ACTION.TOGGLE_POPUP);
+  } catch(error) {
+    if (tabId === lastTabIdExtensionClickedOn) {
+      sendTogglePopupMessage(tabId);
+    }
+  }
 }
 
 const toolbarIconClick = async (tab: Tabs.Tab) => {
-  console.log("toolbar button clicked", tab);
   try {
-    if (tab.status !== 'complete') return;
-    if (!tab.url || !tab.id) return;
+    // if (tab.status !== 'complete') {
+    //   return;
+    // }
+    if (!tab.url || !tab.id) {
+      showTabNotRecordableNotification();
+      return;
+    }
     // await handleContentScriptInjection(tab.id, tab.url);
-    if (tab?.url && tab?.id) {
-      if (tab.status === "complete") {
-        if (isRecording) {
-          stopRecording();
-        } else {
-          if (!isWaitingForUploadOrDeletingRecording) {
-            await sentMessageToContentScript(tab.id, MESSAGE_ACTION.TOGGLE_POPUP);
-          }
-        }
-        
-      } else {
-        
-      }
+    
+    if (isRecording) {
+      stopRecording();
     } else {
-      
+      if (isWaitingForUploadOrDeletingRecording) {
+        focusThRecordingTab();
+      } else {
+        if (isScriptableUrl(tab.url)) {
+          if (pinnedTabId > 0) {
+            resetRecordingSession();
+          }
+          if (lastTabIdExtensionClickedOn > 0 && lastTabIdExtensionClickedOn !== tab.id) {
+            await sentMessageToContentScript(lastTabIdExtensionClickedOn, MESSAGE_ACTION.HIDE_POPUP);
+          }
+          lastTabIdExtensionClickedOn = tab.id;
+          sendTogglePopupMessage(tab.id);
+        } else {
+          showTabNotRecordableNotification();
+        }
+      }
     }
   } catch (error) {
     
@@ -69,7 +114,6 @@ const fetchSetupData = async () => {
       return {success: false, error: "Something went wrong. Please try again."};
     }
   } catch(error) {
-    console.log({error})
     return {success: false, error: "Something went wrong. Please try again."};
   }
 }
@@ -90,17 +134,14 @@ const uploadRecordingData = async (data: Blob) => {
         }
       })
       if (uploadResponse.ok) {
-        console.log('File uploaded successfully');
         return {success: true, error: null};
       } else {
-        console.error('Error uploading file. Status:', uploadResponse.status);
         return {success: false, error: "Something went wrong. Please try again."};
       }
     } else {
       return {success: false, error: "Something went wrong. Please try again."};
     }
   } catch(error) {
-    console.log({error})
     return {success: false, error: "Something went wrong. Please try again."};
   }
 }
@@ -108,7 +149,19 @@ const uploadRecordingData = async (data: Blob) => {
 const resetRecordingSession = () => {
   isWaitingForUploadOrDeletingRecording = false;
   recordingInitiatedOnTabId = 0;
+  recordingInitiatedOnWindowId = 0;
   recordingData = null;
+  browser.action.setIcon({path: getImagePath("not-recording.png")});
+  browser.action.setBadgeText({
+    text: ''
+  });
+  isRecording = false;
+  if (pinnedTabId > 0) {
+    browser.tabs.remove(pinnedTabId);
+    pinnedTabId = 0;
+  }
+  recordingBinaryDataParts = [];
+  recordingBinaryDataPartsRecieved = 0;
 }
 
 const onMessageListener = async (
@@ -116,59 +169,85 @@ const onMessageListener = async (
   sender: Runtime.MessageSender,
   sendResponse: any
 ) => {
-  console.log("onMessageListener:::", msg);
+  const tabId = sender.tab?.id;
+  const windowId = sender.tab?.windowId;
   try {
     switch (msg.action) {
+      case MESSAGE_ACTION.RESET_RECORDING_SESSION_IF_NOT_RECORDING: {
+        if (isWaitingForUploadOrDeletingRecording && tabId === recordingInitiatedOnTabId) {
+          resetRecordingSession();
+        }
+        break;
+      }
       case MESSAGE_ACTION.HIDE_POPUP: {
-        if (sender.tab?.id) {
-          sentMessageToContentScript(sender.tab.id, MESSAGE_ACTION.HIDE_POPUP);
+        if (tabId) {
+          sentMessageToContentScript(tabId, MESSAGE_ACTION.HIDE_POPUP);
         }
         break;
       }
       case MESSAGE_ACTION.SHOW_POPUP: {
-        if (sender.tab?.id) {
-          sentMessageToContentScript(sender.tab.id, MESSAGE_ACTION.SHOW_POPUP);
+        if (tabId) {
+          sentMessageToContentScript(tabId, MESSAGE_ACTION.SHOW_POPUP);
         }
         break;
       }
       case MESSAGE_ACTION.GET_SETUP_DATA: {
         sendResponse({status: true});
         const response = await fetchSetupData();
-        console.log({response});
         return response;
       }
       case MESSAGE_ACTION.START_RECORDING: {
-        const targetTabId = sender.tab?.id;
-        if (!targetTabId) {
+        if (!tabId) {
           break;
         }
-        recordingInitiatedOnTabId = targetTabId;
-        const {selectedMicrophoneDeviceId, maxDurationInSeconds} = msg.data;
-        chrome.tabCapture.getMediaStreamId({
-          targetTabId
-        }, async (streamId) => {
-          console.log({selectedMicrophoneDeviceId, streamId})
-          chrome.action.setIcon({path: getImagePath("recording.png")});
-          isRecording = true;
-          pinnedTabId = (
-            await chrome.tabs.create({
-              pinned: true,
-              url: './pinnedTab.html',
-              active: false,
-              index: 0,
-            })
-          ).id!;
-          setTimeout(() => {
-            browser.tabs.sendMessage(pinnedTabId, {
-              action: MESSAGE_ACTION.START_RECORDING,
-              data: {
-                streamId,
-                selectedMicrophoneDeviceId,
-                maxDurationInSeconds
+        recordingInitiatedOnTabId = tabId;
+        recordingInitiatedOnWindowId = windowId!;
+        const {selectedMicrophoneDeviceLabel, maxDurationInSeconds} = msg.data;
+          
+          try {
+            pinnedTabId = (
+              await chrome.tabs.create({
+                pinned: true,
+                url: './pinnedTab.html',
+                active: false,
+                index: 0,
+              })
+            ).id!;
+
+            setTimeout(() => {
+              if (pinnedTabId > 0) {
+                // isRecording = true;
+                // chrome.action.setIcon({path: getImagePath("recording.png")});
+                browser.tabs.sendMessage(pinnedTabId, {
+                  action: MESSAGE_ACTION.START_RECORDING,
+                  data: {
+                    // streamId,
+                    selectedMicrophoneDeviceLabel,
+                    maxDurationInSeconds,
+                    tabId
+                  }
+                });
+                
               }
-            });
-          }, 1000);
-        });
+            }, 1000);
+            
+          } catch(error) {
+            
+          }
+          
+        break;
+      }
+      case MESSAGE_ACTION.RECORDING_STARTED: {
+        if (tabId === pinnedTabId) {
+          isRecording = true;
+          chrome.action.setIcon({path: getImagePath("recording.png")});
+        } else {
+          if (tabId) {
+            browser.tabs.sendMessage(tabId, {action: MESSAGE_ACTION.CANCEL_RECORDING});
+            resetRecordingSession();
+          }
+        }
+        
         break;
       }
       case MESSAGE_ACTION.RECORDING_TIME_REMAINING: {
@@ -178,29 +257,48 @@ const onMessageListener = async (
         });
         break;
       }
-      case MESSAGE_ACTION.STOP_RECORDING: {
-        browser.action.setBadgeText({
-          text: ''
+      case MESSAGE_ACTION.RECORDING_CANCELLED: {
+        browser.tabs.sendMessage(recordingInitiatedOnTabId, {
+          action: MESSAGE_ACTION.RECORDING_CANCELLED,
+          data: msg.data
         });
+        resetRecordingSession();
+        break;
+      }
+      case MESSAGE_ACTION.STOP_RECORDING: {
         stopRecording();
         break;
       }
       case MESSAGE_ACTION.RECORDING_COMPLETED: {
-        const {data} = msg;
+
+        const {binaryData, blobUrl, binaryDataPart, binaryDataTotalParts, binaryDataLength} = msg.data;
         
-        isWaitingForUploadOrDeletingRecording = true;
-        
-        const blob: Blob = binaryToBlob(data, 'video/webm');
-        
-        recordingData = blob;
-        // uploadRecordingData(recordingData);
-        
-        if (pinnedTabId > 0) {
-          browser.tabs.remove(pinnedTabId);
+        recordingBinaryDataParts[binaryDataPart] = binaryData;
+        recordingBinaryDataPartsRecieved++;
+
+        if (recordingBinaryDataPartsRecieved === binaryDataTotalParts) {
+          // chrome.tabs.create({
+          //   url: blobUrl,
+          //   active: true,
+          // })
+          const fullRecordingBinaryData = recordingBinaryDataParts.join("");
+          const blob: Blob = binaryToBlob(fullRecordingBinaryData, 'video/webm');
+
+          recordingData = blob;
+          
+          if (pinnedTabId > 0) {
+            // setTimeout(() => {
+            //   browser.tabs.remove(pinnedTabId);
+            //   pinnedTabId = 0;
+            // }, 2000);
+            browser.tabs.remove(pinnedTabId);
+            pinnedTabId = 0;
+          }
+
+          browser.tabs.sendMessage(recordingInitiatedOnTabId, {
+            action: MESSAGE_ACTION.RECORDING_COMPLETED
+          });
         }
-        browser.tabs.sendMessage(recordingInitiatedOnTabId, {
-          action: MESSAGE_ACTION.RECORDING_COMPLETED
-        });
         break;
       }
       case MESSAGE_ACTION.UPLOAD_RECORDING: {
@@ -219,6 +317,28 @@ const onMessageListener = async (
         resetRecordingSession();
         break;
       }
+      case MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_GRANTED: {
+        try {
+          const activeTab = await getActiveTab();
+          if (activeTab && activeTab.id) {
+            browser.tabs.sendMessage(activeTab.id, {action: MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_GRANTED, data: msg.data})
+          }
+        } catch(e) {
+
+        }
+        break;
+      }
+      case MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_DENIED: {
+        try {
+          const activeTab = await getActiveTab();
+          if (activeTab && activeTab.id) {
+            browser.tabs.sendMessage(activeTab.id, {action: MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_DENIED})
+          }
+        } catch(e) {
+
+        }
+        break;
+      }
       default:
         break;
     }
@@ -227,7 +347,7 @@ const onMessageListener = async (
 };
 
 const onInstalled = (details: Runtime.OnInstalledDetailsType) => {
-  console.log("extension installed", details.reason);
+  
 };
 
 const tabUpdateHandler = async (
@@ -235,11 +355,40 @@ const tabUpdateHandler = async (
   changeInfo: browser.Tabs.OnUpdatedChangeInfoType,
   tabInfo: browser.Tabs.Tab
 ) => {
-  if (changeInfo.status === "complete" && tabInfo.url) {
-    console.log("tab UpdateHandler Changed attributes: ", changeInfo);
-    if (isWaitingForUploadOrDeletingRecording && recordingInitiatedOnTabId === tabId) {
+  // if (changeInfo.status === "complete" && tabInfo.url) {
+  //   console.log("tab UpdateHandler Changed attributes: ", changeInfo);
+  // }
+};
+
+const tabRemoveHandler = async (tabId: number, removeInfo: browser.Tabs.OnRemovedRemoveInfoType) => {
+  if (tabId === recordingInitiatedOnTabId) {
+    if (isRecording) {
+      try {
+        if (pinnedTabId > 0) {
+          browser.tabs.sendMessage(pinnedTabId, {action: MESSAGE_ACTION.CANCEL_RECORDING});
+        }
+      } catch(e) {
+  
+      }
+      setTimeout(() => {
+        resetRecordingSession();  
+      }, 1000);
+      
+    } else if (isWaitingForUploadOrDeletingRecording) {
       resetRecordingSession();
     }
+  } else if (tabId === pinnedTabId) {
+    pinnedTabId = 0;
+    if (recordingInitiatedOnTabId > 0 && isRecording) {
+      browser.tabs.sendMessage(recordingInitiatedOnTabId, {
+        action: MESSAGE_ACTION.RECORDING_CANCELLED,
+        data: {error: "Recording cancelled as the recording controlling tab was closed."}
+      });
+    }
+    setTimeout(() => {
+      resetRecordingSession();  
+    }, 500);
+    
   }
 };
 
@@ -247,15 +396,16 @@ const tabUpdateHandler = async (
 browser.runtime.onMessage.addListener(onMessageListener);
 browser[browserAction].onClicked.addListener(toolbarIconClick);
 browser.tabs.onUpdated.addListener(tabUpdateHandler);
+browser.tabs.onRemoved.addListener(tabRemoveHandler)
 browser.runtime.onInstalled.addListener(onInstalled);
 
 // async function createOffscreen() {
 //   if (await chrome.offscreen.hasDocument?.()) return;
 //   console.log('Creating offscreen');
 //   chrome.offscreen.createDocument({
-//     url: 'offscreen.html',
-//     reasons: ["AUDIO_PLAYBACK"],
-//     justification: 'keep service worker running for playing radio',
+//     url: chrome.runtime.getURL("assets/offscreen.html"),
+//     reasons: ["USER_MEDIA" as chrome.offscreen.Reason],
+//     justification: 'Getting permission for recording audio from microphone',
 //   });
 // }
 

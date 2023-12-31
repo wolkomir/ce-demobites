@@ -2,7 +2,7 @@
   "__firefox__manifest_version": 2,
   "__chrome|opera|edge__manifest_version": 3,
   "name": "Demo Bites",
-  "version": "1.0.2",
+  "version": "1.0.0",
 
   "icons": {
     "128": "assets/Icons/icon-128.png"
@@ -14,10 +14,11 @@
     "tabs",
     "storage",
     "tabCapture",
-    "activeTab"
+    "activeTab",
+    "notifications"
   ],
 
-  "__chrome|opera|edge__permissions": ["tabs","storage","tabCapture", "activeTab"],
+  "__chrome|opera|edge__permissions": ["tabs","storage","tabCapture", "activeTab", "notifications"],
   "__chrome|opera|edge__host_permissions": [
     
   ],
