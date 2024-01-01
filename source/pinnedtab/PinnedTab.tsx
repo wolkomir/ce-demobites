@@ -1,5 +1,5 @@
 import React, {useEffect} from 'react';
-import browser from 'webextension-polyfill';
+import browser, { Runtime } from 'webextension-polyfill';
 import fixWebmDuration from "fix-webm-duration";
 
 import './styles.scss';
@@ -51,9 +51,10 @@ const PinnedTab = () => {
     }, 1000)
   }
 
-  const onMessageListener = async (msg: Message) => {
+  const onMessageListener = async (msg: Message, sender: Runtime.MessageSender, sendResponse: any) => {
     switch (msg.action) {
       case MESSAGE_ACTION.START_RECORDING: {
+        sendResponse({status: true});
         data.splice(0, data.length);
         const {selectedMicrophoneDeviceLabel, maxDurationInSeconds, targetTabId} = msg.data
         chrome.tabCapture.getMediaStreamId({
@@ -154,8 +155,7 @@ const PinnedTab = () => {
               }
             );
           });
-        
-        return true;
+        return;
       }
       case MESSAGE_ACTION.STOP_RECORDING: {
         stopRecording();
@@ -166,9 +166,9 @@ const PinnedTab = () => {
         break;
       }
       default:
-        return true;
+        break;
     }
-    return true;
+    sendResponse({status: true});
   };
 
   useEffect(() => {

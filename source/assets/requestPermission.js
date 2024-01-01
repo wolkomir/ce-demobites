@@ -19,8 +19,6 @@ async function getUserPermission() {
         resolve(microphoneDevices);
       })
       .catch((error) => {
-        console.error("Error requesting microphone permission", error);
-
         // Handling different error scenarios
         if (error.name === "Permission denied") {
           reject("MICROPHONE_PERMISSION_DENIED");

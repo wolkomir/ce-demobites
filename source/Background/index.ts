@@ -176,16 +176,18 @@ const onMessageListener = async (
         break;
       }
       case MESSAGE_ACTION.HIDE_POPUP: {
+        sendResponse({status: true});
         if (tabId) {
           sentMessageToContentScript(tabId, MESSAGE_ACTION.HIDE_POPUP);
         }
-        break;
+        return;
       }
       case MESSAGE_ACTION.SHOW_POPUP: {
+        sendResponse({status: true});
         if (tabId) {
           sentMessageToContentScript(tabId, MESSAGE_ACTION.SHOW_POPUP);
         }
-        break;
+        return;
       }
       case MESSAGE_ACTION.GET_SETUP_DATA: {
         sendResponse({status: true});
@@ -196,6 +198,7 @@ const onMessageListener = async (
         if (!tabId) {
           break;
         }
+        sendResponse({status: true});
         recordingInitiatedOnTabId = tabId;
         recordingInitiatedOnWindowId = windowId!;
         const {selectedMicrophoneDeviceLabel, maxDurationInSeconds} = msg.data;
@@ -230,9 +233,10 @@ const onMessageListener = async (
             
           }
           
-        break;
+        return;
       }
       case MESSAGE_ACTION.RECORDING_STARTED: {
+        sendResponse({status: true});
         if (tabId === pinnedTabId) {
           isRecording = true;
           chrome.action.setIcon({path: getImagePath("recording.png")});
@@ -242,8 +246,7 @@ const onMessageListener = async (
             resetRecordingSession();
           }
         }
-        
-        break;
+        return;
       }
       case MESSAGE_ACTION.RECORDING_TIME_REMAINING: {
         const {secondsRemainingToStopRecording} = msg.data;
@@ -253,16 +256,18 @@ const onMessageListener = async (
         break;
       }
       case MESSAGE_ACTION.RECORDING_CANCELLED: {
+        sendResponse({status: true});
         sentMessageToContentScript(recordingInitiatedOnTabId, MESSAGE_ACTION.RECORDING_CANCELLED,msg.data);
         resetRecordingSession();
-        break;
+        return;
       }
       case MESSAGE_ACTION.STOP_RECORDING: {
+        sendResponse({status: true});
         stopRecording();
-        break;
+        return;
       }
       case MESSAGE_ACTION.RECORDING_COMPLETED: {
-
+        sendResponse({status: true});
         const {binaryData, blobUrl, binaryDataPart, binaryDataTotalParts, binaryDataLength} = msg.data;
         
         recordingBinaryDataParts[binaryDataPart] = binaryData;
@@ -289,9 +294,10 @@ const onMessageListener = async (
 
           sentMessageToContentScript(recordingInitiatedOnTabId, MESSAGE_ACTION.RECORDING_COMPLETED);
         }
-        break;
+        return;
       }
       case MESSAGE_ACTION.UPLOAD_RECORDING: {
+        sendResponse({status: true});
         const {success, error} = await uploadRecordingData(recordingData!);
         sentMessageToContentScript(recordingInitiatedOnTabId, MESSAGE_ACTION.UPLOAD_RECORDING_COMPLETED,{
             success,
@@ -299,13 +305,14 @@ const onMessageListener = async (
           }
         );
         resetRecordingSession();
-        break;
+        return;
       }
       case MESSAGE_ACTION.DELETE_RECORDING: {
         resetRecordingSession();
         break;
       }
       case MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_GRANTED: {
+        sendResponse({status: true});
         try {
           const activeTab = await getActiveTab();
           if (activeTab && activeTab.id) {
@@ -314,9 +321,10 @@ const onMessageListener = async (
         } catch(e) {
 
         }
-        break;
+        return;
       }
       case MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_DENIED: {
+        sendResponse({status: true});
         try {
           const activeTab = await getActiveTab();
           if (activeTab && activeTab.id) {
@@ -325,7 +333,7 @@ const onMessageListener = async (
         } catch(e) {
 
         }
-        break;
+        return;
       }
       default:
         break;

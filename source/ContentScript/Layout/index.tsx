@@ -91,6 +91,7 @@ const Layout = () => {
         break;
       }
       case MESSAGE_ACTION.UPLOAD_RECORDING_COMPLETED: {
+        sendResponse({status: true});
         const {success, error} = msg.data;
         if (success) {
           setWillShowPopup(false);
@@ -101,7 +102,7 @@ const Layout = () => {
         } else {
           alert(error ? error : "Some error occurred. Please try again later.");
         }
-        break;
+        return;
       }
       default:
         break;
@@ -128,16 +129,13 @@ const Layout = () => {
 
   const fetchSetupData = async () => {
     const setupDataResponse = await sendMessageToExtensionPages(MESSAGE_ACTION.GET_SETUP_DATA);
-    const {success, error} = setupDataResponse;
-    if (success) {
+    if (setupDataResponse?.success) {
       setMaxDurationInSeconds(parseInt(setupDataResponse.maxDurationInSeconds, 10));
       askForMicrophonePermission();
     } else {
-      if (error) {
+      if (setupDataResponse?.error) {
         setWillShowPopup(false);
-        alert(error);
-      } else {
-        fetchSetupData();
+        alert(setupDataResponse.error);
       }
     }
   }
