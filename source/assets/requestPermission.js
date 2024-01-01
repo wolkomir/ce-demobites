@@ -34,8 +34,12 @@ async function getUserPermission() {
 // Call the function to request microphone permission
 getUserPermission()
 .then((microphoneDevices) => {
-  chrome.runtime.sendMessage({action: "MICROPHONE_DEVICE_PERMISSION_GRANTED", data:{microphoneDevices}});
+  try {
+    chrome.runtime.sendMessage({action: "MICROPHONE_DEVICE_PERMISSION_GRANTED", data:{microphoneDevices}});
+  } catch (e) {}
 })
 .catch(error => {
-  chrome.runtime.sendMessage({action: "MICROPHONE_DEVICE_PERMISSION_DENIED"});
+  try {
+    chrome.runtime.sendMessage({action: "MICROPHONE_DEVICE_PERMISSION_DENIED"});
+  } catch (e) {}
 });

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import browser from "webextension-polyfill";
+import browser, { Runtime } from "webextension-polyfill";
 
 import useStyles from "./layout.style";
 import {
@@ -9,7 +9,7 @@ import {
   PERMISSIONS,
 } from "../../Config";
 import {
-  getPermissionStatus,
+  getPermissionStatus, sendMessageToExtensionPages,
 } from "../../Utils/extensionUtils";
 
 import _ from "lodash";
@@ -43,24 +43,24 @@ const Layout = () => {
   const [currentState, setCurrentState] = useState<State>(State.Initial);
   const [maxDurationInSeconds, setMaxDurationInSeconds] = useState(0);
   
-  const onMessageListener = async (msg: Message) => {
+  const onMessageListener = async (msg: Message, sender: Runtime.MessageSender, sendResponse: any) => {
     switch (msg.action) {
       case MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_GRANTED: {
         // getMicrophoneDevices();
         const {microphoneDevices} = msg.data;
         setSelectedMicrophoneDeviceLabel(microphoneDevices.length > 0 ? microphoneDevices[0].value : NoMicrophone.value)
         setMicrophoneDevices([...microphoneDevices, NoMicrophone]);
-        return true;
+        break;
       }
       case MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_DENIED: {
         setMicrophoneDevices([NoMicrophone]);
-        return true;
+        break;
       }
       case MESSAGE_ACTION.TOGGLE_POPUP: {
         setWillShowPopup((prev) => {
           return !prev;
         });
-        return true;
+        break;
       }
       case MESSAGE_ACTION.HIDE_POPUP: {
         setWillShowPopup(false);
@@ -104,9 +104,9 @@ const Layout = () => {
         break;
       }
       default:
-        return true;
+        break;
     }
-    return true;
+    sendResponse({success:true});
   };
 
   const askForMicrophonePermission = async () => {
@@ -127,7 +127,7 @@ const Layout = () => {
   }
 
   const fetchSetupData = async () => {
-    const setupDataResponse = await browser.runtime.sendMessage({action: MESSAGE_ACTION.GET_SETUP_DATA});
+    const setupDataResponse = await sendMessageToExtensionPages(MESSAGE_ACTION.GET_SETUP_DATA);
     const {success, error} = setupDataResponse;
     if (success) {
       setMaxDurationInSeconds(parseInt(setupDataResponse.maxDurationInSeconds, 10));
@@ -144,7 +144,7 @@ const Layout = () => {
 
   useEffect(() => {
     browser.runtime.onMessage.addListener(onMessageListener);
-    browser.runtime.sendMessage({action: MESSAGE_ACTION.RESET_RECORDING_SESSION_IF_NOT_RECORDING});
+    sendMessageToExtensionPages(MESSAGE_ACTION.RESET_RECORDING_SESSION_IF_NOT_RECORDING);
     return () => {
       browser.runtime.onMessage.removeListener(onMessageListener);
     };
@@ -175,16 +175,16 @@ const Layout = () => {
 
   const startRecording = () => {
     setWillShowPopup(false);
-    browser.runtime.sendMessage({action: MESSAGE_ACTION.START_RECORDING, data: {selectedMicrophoneDeviceLabel, maxDurationInSeconds}});
+    sendMessageToExtensionPages(MESSAGE_ACTION.START_RECORDING, {selectedMicrophoneDeviceLabel, maxDurationInSeconds});
   }
 
   const uploadRecording = () => {
     setCurrentState(State.UploadingRecording);
-    browser.runtime.sendMessage({action: MESSAGE_ACTION.UPLOAD_RECORDING});
+    sendMessageToExtensionPages(MESSAGE_ACTION.UPLOAD_RECORDING);
   }
 
   const deleteRecording = async () => {
-    await browser.runtime.sendMessage({action: MESSAGE_ACTION.DELETE_RECORDING});
+    await sendMessageToExtensionPages(MESSAGE_ACTION.DELETE_RECORDING);
     setCurrentState(State.Initial);
     alert("Recording deleted successfully");
   }

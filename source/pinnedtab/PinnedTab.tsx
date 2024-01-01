@@ -4,7 +4,7 @@ import fixWebmDuration from "fix-webm-duration";
 
 import './styles.scss';
 import { MESSAGE_ACTION, Message } from '../Config';
-import { blobToBinary } from '../Utils/extensionUtils';
+import { blobToBinary, sendMessageToExtensionPages } from '../Utils/extensionUtils';
 
 const MAXIMUM_LENGTH_OF_BINARY_DATA = 45000000;
 
@@ -44,9 +44,9 @@ const PinnedTab = () => {
       if (secondsRemainingToStopRecording <= 0) {
         window.clearInterval(intervalId);
         intervalId = 0;
-        browser.runtime.sendMessage({action: MESSAGE_ACTION.STOP_RECORDING})
+        sendMessageToExtensionPages(MESSAGE_ACTION.STOP_RECORDING);
       } else if(secondsRemainingToStopRecording < 10) {
-        browser.runtime.sendMessage({action: MESSAGE_ACTION.RECORDING_TIME_REMAINING, data: {secondsRemainingToStopRecording}})
+        sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_TIME_REMAINING, {secondsRemainingToStopRecording});
       }
     }, 1000)
   }
@@ -110,7 +110,7 @@ const PinnedTab = () => {
                       mediaSource.connect(destination);
                     });
                   } catch(error) {
-                    browser.runtime.sendMessage({action: MESSAGE_ACTION.RECORDING_CANCELLED, data: {error: "Recording cancelled. You might have not allowed to record audio."}})
+                    sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_CANCELLED, {error: "Recording cancelled. You might have not allowed to record audio."});
                     return;
                   }
                 }
@@ -127,7 +127,7 @@ const PinnedTab = () => {
                 recorder.ondataavailable = (event: any) => data.push(event.data);
                 recorder.onstart = () => {
                   startTime = Date.now();
-                  browser.runtime.sendMessage({action: MESSAGE_ACTION.RECORDING_STARTED})
+                  sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_STARTED);
                   
                 }
                 recorder.onstop = async () => {
@@ -144,7 +144,7 @@ const PinnedTab = () => {
                   }
                   for (let i = 0; i < binaryDataParts.length; i++) {
                     setTimeout(() => {
-                      browser.runtime.sendMessage({action: MESSAGE_ACTION.RECORDING_COMPLETED, data: {blobUrl: URL.createObjectURL(blob), binaryData:binaryDataParts[i], binaryDataPart: i, binaryDataTotalParts: binaryDataParts.length, binaryDataLength: binaryData.length}});  
+                      sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_COMPLETED, {blobUrl: URL.createObjectURL(blob), binaryData:binaryDataParts[i], binaryDataPart: i, binaryDataTotalParts: binaryDataParts.length, binaryDataLength: binaryData.length});
                     }, 50);
                   }
                 };
@@ -174,7 +174,7 @@ const PinnedTab = () => {
   useEffect(() => {
     browser.runtime.onMessage.addListener(onMessageListener)
     intervalIdForKeepAlive = window.setInterval(() => {
-       browser.runtime.sendMessage({action: 'keep_alive'});
+      sendMessageToExtensionPages(MESSAGE_ACTION.KEEP_ALIVE);
     }, 15000);
     return () => {
       browser.runtime.onMessage.removeListener(onMessageListener)

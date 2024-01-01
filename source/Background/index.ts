@@ -37,14 +37,10 @@ const focusThRecordingTab = () => {
 
 const stopRecording = () => {
   isWaitingForUploadOrDeletingRecording = true;
-  browser.tabs.sendMessage(recordingInitiatedOnTabId, {
-    action: MESSAGE_ACTION.PROCESSING_RECORDING,
-  });
+  sentMessageToContentScript(recordingInitiatedOnTabId, MESSAGE_ACTION.PROCESSING_RECORDING);
   focusThRecordingTab();
   isRecording = false;
-  browser.tabs.sendMessage(pinnedTabId, {
-    action: MESSAGE_ACTION.STOP_RECORDING,
-  });
+  sentMessageToContentScript(pinnedTabId, MESSAGE_ACTION.STOP_RECORDING);
   browser.action.setIcon({path: getImagePath("not-recording.png")});
   browser.action.setBadgeText({
     text: ''
@@ -218,15 +214,14 @@ const onMessageListener = async (
               if (pinnedTabId > 0) {
                 // isRecording = true;
                 // chrome.action.setIcon({path: getImagePath("recording.png")});
-                browser.tabs.sendMessage(pinnedTabId, {
-                  action: MESSAGE_ACTION.START_RECORDING,
-                  data: {
+                sentMessageToContentScript(pinnedTabId, MESSAGE_ACTION.START_RECORDING,
+                  {
                     // streamId,
                     selectedMicrophoneDeviceLabel,
                     maxDurationInSeconds,
                     tabId
                   }
-                });
+                );
                 
               }
             }, 1000);
@@ -243,7 +238,7 @@ const onMessageListener = async (
           chrome.action.setIcon({path: getImagePath("recording.png")});
         } else {
           if (tabId) {
-            browser.tabs.sendMessage(tabId, {action: MESSAGE_ACTION.CANCEL_RECORDING});
+            sentMessageToContentScript(tabId, MESSAGE_ACTION.CANCEL_RECORDING);
             resetRecordingSession();
           }
         }
@@ -258,10 +253,7 @@ const onMessageListener = async (
         break;
       }
       case MESSAGE_ACTION.RECORDING_CANCELLED: {
-        browser.tabs.sendMessage(recordingInitiatedOnTabId, {
-          action: MESSAGE_ACTION.RECORDING_CANCELLED,
-          data: msg.data
-        });
+        sentMessageToContentScript(recordingInitiatedOnTabId, MESSAGE_ACTION.RECORDING_CANCELLED,msg.data);
         resetRecordingSession();
         break;
       }
@@ -295,21 +287,17 @@ const onMessageListener = async (
             pinnedTabId = 0;
           }
 
-          browser.tabs.sendMessage(recordingInitiatedOnTabId, {
-            action: MESSAGE_ACTION.RECORDING_COMPLETED
-          });
+          sentMessageToContentScript(recordingInitiatedOnTabId, MESSAGE_ACTION.RECORDING_COMPLETED);
         }
         break;
       }
       case MESSAGE_ACTION.UPLOAD_RECORDING: {
         const {success, error} = await uploadRecordingData(recordingData!);
-        browser.tabs.sendMessage(recordingInitiatedOnTabId, {
-          action: MESSAGE_ACTION.UPLOAD_RECORDING_COMPLETED,
-          data: {
+        sentMessageToContentScript(recordingInitiatedOnTabId, MESSAGE_ACTION.UPLOAD_RECORDING_COMPLETED,{
             success,
             error
           }
-        });
+        );
         resetRecordingSession();
         break;
       }
@@ -321,7 +309,7 @@ const onMessageListener = async (
         try {
           const activeTab = await getActiveTab();
           if (activeTab && activeTab.id) {
-            browser.tabs.sendMessage(activeTab.id, {action: MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_GRANTED, data: msg.data})
+            sentMessageToContentScript(activeTab.id, MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_GRANTED, msg.data)
           }
         } catch(e) {
 
@@ -332,7 +320,7 @@ const onMessageListener = async (
         try {
           const activeTab = await getActiveTab();
           if (activeTab && activeTab.id) {
-            browser.tabs.sendMessage(activeTab.id, {action: MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_DENIED})
+            sentMessageToContentScript(activeTab.id, MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_DENIED)
           }
         } catch(e) {
 
@@ -365,7 +353,7 @@ const tabRemoveHandler = async (tabId: number, removeInfo: browser.Tabs.OnRemove
     if (isRecording) {
       try {
         if (pinnedTabId > 0) {
-          browser.tabs.sendMessage(pinnedTabId, {action: MESSAGE_ACTION.CANCEL_RECORDING});
+          sentMessageToContentScript(pinnedTabId, MESSAGE_ACTION.CANCEL_RECORDING);
         }
       } catch(e) {
   
@@ -380,10 +368,8 @@ const tabRemoveHandler = async (tabId: number, removeInfo: browser.Tabs.OnRemove
   } else if (tabId === pinnedTabId) {
     pinnedTabId = 0;
     if (recordingInitiatedOnTabId > 0 && isRecording) {
-      browser.tabs.sendMessage(recordingInitiatedOnTabId, {
-        action: MESSAGE_ACTION.RECORDING_CANCELLED,
-        data: {error: "Recording cancelled as the recording controlling tab was closed."}
-      });
+      sentMessageToContentScript(recordingInitiatedOnTabId, MESSAGE_ACTION.RECORDING_CANCELLED,{error: "Recording cancelled as the recording controlling tab was closed."}
+      );
     }
     setTimeout(() => {
       resetRecordingSession();  

@@ -83,7 +83,10 @@ export const sentMessageToContentScript = (
   action: MESSAGE_ACTION,
   data = {}
 ) => {
-  return browser.tabs.sendMessage(tabId, { action, data });
+  try {
+    return browser.tabs.sendMessage(tabId, { action, data });
+  } catch(e) {}
+  
 };
 
 export const sendMessageToAllTab = (action: MESSAGE_ACTION, data = {}) => {

@@ -1,6 +1,7 @@
 const BASE_URL = "https://api.demobites.com/ce/";
 
 export enum MESSAGE_ACTION {
+  KEEP_ALIVE = 'keep_alive',
   IS_SCRIPT_INJECTED = "IS_SCRIPT_INJECTED",
   TOGGLE_POPUP = "TOGGLE_POPUP",
   HIDE_POPUP = "HIDE_POPUP",
