@@ -50,10 +50,16 @@ const Layout = () => {
         const {microphoneDevices} = msg.data;
         setSelectedMicrophoneDeviceLabel(microphoneDevices.length > 0 ? microphoneDevices[0].value : NoMicrophone.value)
         setMicrophoneDevices([...microphoneDevices, NoMicrophone]);
+        if (!willShowPopup) {
+          removePermissionIframeIfExists();
+        }
         break;
       }
       case MESSAGE_ACTION.MICROPHONE_DEVICE_PERMISSION_DENIED: {
         setMicrophoneDevices([NoMicrophone]);
+        if (!willShowPopup) {
+          removePermissionIframeIfExists();
+        }
         break;
       }
       case MESSAGE_ACTION.TOGGLE_POPUP: {
@@ -129,9 +135,14 @@ const Layout = () => {
 
   const fetchSetupData = async () => {
     const setupDataResponse = await sendMessageToExtensionPages(MESSAGE_ACTION.GET_SETUP_DATA);
-    if (setupDataResponse?.success) {
+    if (setupDataResponse?.success && setupDataResponse.maxDurationInSeconds) {
       setMaxDurationInSeconds(parseInt(setupDataResponse.maxDurationInSeconds, 10));
-      askForMicrophonePermission();
+      if (willShowPopup) {
+        askForMicrophonePermission();
+      } else {
+        setLoading(false);
+      }
+      
     } else {
       if (setupDataResponse?.error) {
         setWillShowPopup(false);
@@ -149,21 +160,24 @@ const Layout = () => {
   }, []);
 
   useEffect(() => {
-    if (willShowPopup && maxDurationInSeconds === 0) {
+    if (maxDurationInSeconds === 0) {
       setLoading(true);
       fetchSetupData();
-      setTimeout(() => {
-        if (willShowPopup) {
-          const existingIframe = document.getElementById(PERMISSION_IFRAME_ID);
-          if (!existingIframe) {
-            askForMicrophonePermission();
-          }
-        }
-      }, 3000);
+      // setTimeout(() => {
+      //   if (willShowPopup) {
+      //     const existingIframe = document.getElementById(PERMISSION_IFRAME_ID);
+      //     if (!existingIframe) {
+      //       askForMicrophonePermission();
+      //     }
+      //   }
+      // }, 1000);
+    } else if (willShowPopup) {
+      setLoading(true);
+      askForMicrophonePermission();
     } else if (!willShowPopup) {
       removePermissionIframeIfExists();
     }
-  }, [willShowPopup, maxDurationInSeconds])
+  }, [willShowPopup, maxDurationInSeconds, currentState])
 
   useEffect(() => {
     if (micrphoneDevices.length > 0) {

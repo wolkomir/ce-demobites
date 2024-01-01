@@ -261,7 +261,7 @@ const onMessageListener = async (
         resetRecordingSession();
         return;
       }
-      case MESSAGE_ACTION.STOP_RECORDING: {
+      case MESSAGE_ACTION.RECORDING_STOPPED_DUE_TO_TIME_LIMIT: {
         sendResponse({status: true});
         stopRecording();
         return;

@@ -112,7 +112,7 @@ export const sendMessageToExtensionPages = async (
   data = {}
 ) => {
   try {
-    return browser.runtime.sendMessage({ action, data });
+    return await browser.runtime.sendMessage({ action, data });
   } catch (e) {
     console.error("send message to extension pages error : ", e);
     return null;

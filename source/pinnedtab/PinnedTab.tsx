@@ -17,6 +17,7 @@ const PinnedTab = () => {
   let maximumDurationInSeconds: number = 0;
   let intervalId: number = 0;
   let startTime: number = 0;
+  let mediaStreamTracks: MediaStreamTrack[] = [];
 
   const stopRecording = () => {
     if (intervalId > 0) {
@@ -37,18 +38,47 @@ const PinnedTab = () => {
     }
   }
 
+  const onSecondElapsed = () => {
+    const currentTime = Date.now();
+    const secondsRemainingToStopRecording = Math.ceil(maximumDurationInSeconds - (currentTime-startTime)/1000);
+    if (secondsRemainingToStopRecording <= 0) {
+      window.clearInterval(intervalId);
+      intervalId = 0;
+      sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_STOPPED_DUE_TO_TIME_LIMIT);
+    } else if(secondsRemainingToStopRecording < 10) {
+      sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_TIME_REMAINING, {secondsRemainingToStopRecording});
+    }
+  }
+
   const startStopRecordingTimer = () => {
     intervalId = window.setInterval(() => {
-      const currentTime = Date.now();
-      const secondsRemainingToStopRecording = Math.ceil(maximumDurationInSeconds - (currentTime-startTime)/1000);
-      if (secondsRemainingToStopRecording <= 0) {
-        window.clearInterval(intervalId);
-        intervalId = 0;
-        sendMessageToExtensionPages(MESSAGE_ACTION.STOP_RECORDING);
-      } else if(secondsRemainingToStopRecording < 10) {
-        sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_TIME_REMAINING, {secondsRemainingToStopRecording});
-      }
+      onSecondElapsed();
     }, 1000)
+  }
+
+  const recorderOnStart = () => {
+    startTime = Date.now();
+    sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_STARTED);
+  }
+
+  const recorderOnStop = async () => {
+    recorder = null;
+    const duration = Date.now() - startTime;
+    const blobWithoutDuration = new Blob(data, {type: 'video/webm'});
+    const blob = await fixWebmDuration(blobWithoutDuration, duration, {logger: false});
+    
+    mediaStreamTracks.forEach((track) => track.stop());
+    
+    const binaryData = await blobToBinary(blob);
+    const binaryDataParts:string[] = [];
+    for (let i = 0; i < binaryData.length; i += MAXIMUM_LENGTH_OF_BINARY_DATA) {
+      binaryDataParts.push(binaryData.substring(i, i + MAXIMUM_LENGTH_OF_BINARY_DATA));
+    }
+    for (let i = 0; i < binaryDataParts.length; i++) {
+      setTimeout(() => {
+        sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_COMPLETED, {blobUrl: URL.createObjectURL(blob), binaryData:binaryDataParts[i], binaryDataPart: i, binaryDataTotalParts: binaryDataParts.length, binaryDataLength: binaryData.length});
+      }, 50);
+    }
   }
 
   const onMessageListener = async (msg: Message, sender: Runtime.MessageSender, sendResponse: any) => {
@@ -57,6 +87,7 @@ const PinnedTab = () => {
         sendResponse({status: true});
         data.splice(0, data.length);
         const {selectedMicrophoneDeviceLabel, maxDurationInSeconds, targetTabId} = msg.data
+        maximumDurationInSeconds = maxDurationInSeconds;
         chrome.tabCapture.getMediaStreamId({
             targetTabId
           }, async (streamId) => {
@@ -76,7 +107,7 @@ const PinnedTab = () => {
                 },
               },
               async (tabMediaStream) => {
-                const mediaStreamTracks: MediaStreamTrack[] = [];
+                mediaStreamTracks = [];
                 if (tabMediaStream) {
                   mediaStreamTracks.push(...tabMediaStream.getVideoTracks());
                 }
@@ -125,31 +156,15 @@ const PinnedTab = () => {
                   //   mimeType: 'video/x-matroska;codecs=avc1',
                   // }
                 );
-                recorder.ondataavailable = (event: any) => data.push(event.data);
+                recorder.ondataavailable = (event: any) => {
+                  data.push(event.data);
+                }
                 recorder.onstart = () => {
-                  startTime = Date.now();
-                  sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_STARTED);
-                  
+                  recorderOnStart();
                 }
                 recorder.onstop = async () => {
-                  const duration = Date.now() - startTime;
-                  const blobWithoutDuration = new Blob(data, {type: 'video/webm'});
-                  const blob = await fixWebmDuration(blobWithoutDuration, duration, {logger: false});
-                  
-                  mediaStreamTracks.forEach((track) => track.stop());
-                  recorder = null;
-                  const binaryData = await blobToBinary(blob);
-                  const binaryDataParts:string[] = [];
-                  for (let i = 0; i < binaryData.length; i += MAXIMUM_LENGTH_OF_BINARY_DATA) {
-                    binaryDataParts.push(binaryData.substring(i, i + MAXIMUM_LENGTH_OF_BINARY_DATA));
-                  }
-                  for (let i = 0; i < binaryDataParts.length; i++) {
-                    setTimeout(() => {
-                      sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_COMPLETED, {blobUrl: URL.createObjectURL(blob), binaryData:binaryDataParts[i], binaryDataPart: i, binaryDataTotalParts: binaryDataParts.length, binaryDataLength: binaryData.length});
-                    }, 50);
-                  }
+                  recorderOnStop();
                 };
-                maximumDurationInSeconds = maxDurationInSeconds;
                 recorder.start();
                 startStopRecordingTimer();
               }
