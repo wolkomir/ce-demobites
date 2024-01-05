@@ -335,6 +335,26 @@ const onMessageListener = async (
         }
         return;
       }
+      case MESSAGE_ACTION.GET_WINDOW_SIZE: {
+        sendResponse({status: true});
+        const window = await browser.windows.getCurrent();
+        return {windowWidth: window.width, windowHeight: window.height};
+      }
+      case MESSAGE_ACTION.RESIZE_WINDOW: {
+        const {windowWidth, windowHeight} = msg.data;
+        browser.windows.getCurrent()
+        .then((window: browser.Windows.Window) => {
+          const updateInfo = {
+            width: windowWidth,
+            height: windowHeight,
+          };
+          if (window.id) {
+            browser.windows.update(window.id, updateInfo);
+          }
+        })
+        .catch(() => {});
+        break;
+      }
       default:
         break;
     }

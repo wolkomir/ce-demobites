@@ -14,6 +14,7 @@ import {
 
 import _ from "lodash";
 import { Button, Flex, Select, Text } from "@mantine/core";
+import { MainWindow } from "../Components";
 
 type SelectOption = {
   value: string;
@@ -42,6 +43,8 @@ const Layout = () => {
   const [isLoading, setLoading] = useState(true);
   const [currentState, setCurrentState] = useState<State>(State.Initial);
   const [maxDurationInSeconds, setMaxDurationInSeconds] = useState(0);
+  const [initialWindowWidth, setInitialWindowWidth] = useState(0);
+  const [initialWindowHeight, setInitialWindowHeight] = useState(0);
   
   const onMessageListener = async (msg: Message, sender: Runtime.MessageSender, sendResponse: any) => {
     switch (msg.action) {
@@ -151,7 +154,21 @@ const Layout = () => {
     }
   }
 
+  const setInitialWindowSize = async () => {
+    const {windowWidth, windowHeight} = await sendMessageToExtensionPages(MESSAGE_ACTION.GET_WINDOW_SIZE);
+    setInitialWindowWidth(windowWidth);
+    setInitialWindowHeight(windowHeight);
+  }
+
   useEffect(() => {
+    if (willShowPopup) {
+      setInitialWindowSize();
+    }
+  }, [willShowPopup]);
+
+  useEffect(() => {
+    setInitialWindowWidth(window.innerWidth);
+    setInitialWindowHeight(window.innerHeight);
     browser.runtime.onMessage.addListener(onMessageListener);
     sendMessageToExtensionPages(MESSAGE_ACTION.RESET_RECORDING_SESSION_IF_NOT_RECORDING);
     return () => {
@@ -207,26 +224,27 @@ const Layout = () => {
     switch(currentState) {
       case State.Initial: {
         return (
-          <div className={classes.wrapper} onClick={(event) => {event.stopPropagation()}}>
-            <Text size={20} weight={"bold"}>Welcome to Demo Bites</Text>
-            {
-              isLoading ? <Text size={16} mt={10}>Loading...</Text> : (
-                <>
-                <Select
-                  data={micrphoneDevices}
-                  label="Microphone"
-                  placeholder="Select a Microphone"
-                  defaultValue={micrphoneDevices.length > 1 ? micrphoneDevices[1].value : NoMicrophone.value}
-                  checked
-                  mt={20}
-                  mb={20}
-                  onChange={setSelectedMicrophoneDeviceLabel}
-                />
-                <Button onClick={startRecording}><Text>Record</Text></Button>
-                </>
-              )
-            }
-          </div>
+          <MainWindow initialWindowWidth={initialWindowWidth} initialWindowHeight={initialWindowHeight} />
+          // <div className={classes.wrapper} onClick={(event) => {event.stopPropagation()}}>
+          //   <Text size={20} weight={"bold"}>Welcome to Demo Bites</Text>
+          //   {
+          //     isLoading ? <Text size={16} mt={10}>Loading...</Text> : (
+          //       <>
+          //       <Select
+          //         data={micrphoneDevices}
+          //         label="Microphone"
+          //         placeholder="Select a Microphone"
+          //         defaultValue={micrphoneDevices.length > 1 ? micrphoneDevices[1].value : NoMicrophone.value}
+          //         checked
+          //         mt={20}
+          //         mb={20}
+          //         onChange={setSelectedMicrophoneDeviceLabel}
+          //       />
+          //       <Button onClick={startRecording}><Text>Record</Text></Button>
+          //       </>
+          //     )
+          //   }
+          // </div>
         )
       }
       case State.ProcessingRecording: {
