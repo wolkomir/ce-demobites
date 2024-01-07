@@ -344,10 +344,20 @@ const onMessageListener = async (
         const {windowWidth, windowHeight} = msg.data;
         browser.windows.getCurrent()
         .then((window: browser.Windows.Window) => {
-          const updateInfo = {
+          
+          const updateInfo: {width: number, height: number, top?: number, left?: number} = {
             width: windowWidth,
             height: windowHeight,
           };
+          if (window.width !== undefined && window.height !== undefined && window.left !== undefined && window.top !== undefined) {
+            const previousWidth = window.width;
+            const previousHeight = window.height;
+            const updatedLeft = window.left + previousWidth - windowWidth;
+            const updatedTop = window.top + previousHeight - windowHeight;
+
+            updateInfo.left = updatedLeft;
+            updateInfo.top = updatedTop;
+          }
           if (window.id) {
             browser.windows.update(window.id, updateInfo);
           }
