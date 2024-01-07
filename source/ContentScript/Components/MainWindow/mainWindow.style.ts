@@ -14,6 +14,8 @@ const useStyles = createStyles((theme, params) => ({
     borderWidth: VALUES.BORDER_WIDTH,
     borderStyle: 'solid',
     padding: VALUES.PADDING,
+    boxShadow: '0 0 7px 7px rgba(0,0,0,0.08)',
+    fontFamily: "HelveticaNeue",
   },
 }));
 
