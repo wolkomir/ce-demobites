@@ -1,5 +1,5 @@
 import React from 'react'
-import { Flex, Image } from '@mantine/core';
+import { Flex, Image, Tooltip } from '@mantine/core';
 
 import useStyles from "./mainWindow.style"
 import { getImagePath } from '../../../Utils';
@@ -20,8 +20,12 @@ export default function MainWindow(
       <Flex style={{justifyContent: 'space-between', alignItems: 'center'}}>
         <Image style={{cursor: 'pointer'}} onClick={() => goToPage(URLS.MAIN_WEBSITE)} src={getImagePath("logo.png")} width={20} height={25} alt="Demobites" />
         <FramseSizeButton initialWidth={initialWindowWidth} initialHeight={initialWindowHeight} />
-        <Image style={{cursor: 'pointer'}} src={getImagePath("blur_off.png")} width={22} height={22} alt="Blue" />
-        <Image style={{cursor: 'pointer'}} src={getImagePath("library_icon.png")} width={18.5} height={13} alt="Library" />
+        <Tooltip position={"top"} withArrow label="Blur Content">
+          <Image style={{cursor: 'pointer'}} src={getImagePath("blur_off.png")} width={22} height={22} alt="Blue" />
+        </Tooltip>
+        <Tooltip position={"top"} withArrow label="Videos">
+          <Image style={{cursor: 'pointer'}} src={getImagePath("library_icon.png")} width={18.5} height={13} alt="Library" />
+        </Tooltip>
       </Flex>
     </div>
   )

@@ -4,11 +4,18 @@ import useStyles from "./frameSizeButton.style"
 import useWindowSize from '../../../Hooks/useWindowSize';
 import { sendMessageToExtensionPages } from '../../../Utils/extensionUtils';
 import { MESSAGE_ACTION } from '../../../Config';
+import { Tooltip } from '@mantine/core';
 
 enum NextFrameState {
   Ratio_16_9 = 1,
   Ratio_4_3,
   Reset
+}
+
+const TooltipTexts = {
+  [NextFrameState.Ratio_16_9]: "16:9",
+  [NextFrameState.Ratio_4_3]: "4:3",
+  [NextFrameState.Reset]: 'Revert'
 }
 
 export default function FramseSizeButton({initialWidth, initialHeight} : {initialWidth: number, initialHeight: number}) {
@@ -94,12 +101,14 @@ export default function FramseSizeButton({initialWidth, initialHeight} : {initia
   }
 
   return (
-    <div
-      style={{cursor: 'pointer'}}
-      onClick={(event) => {
-        changeWindowSize();
-        event.stopPropagation();
-      }}
-      className={className}/>
+    <Tooltip position={"top"} withArrow label={TooltipTexts[nextFrameType]}>
+      <div
+        style={{cursor: 'pointer'}}
+        onClick={(event) => {
+          changeWindowSize();
+          event.stopPropagation();
+        }}
+        className={className}/>
+    </Tooltip>
   )
 }
