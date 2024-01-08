@@ -7,6 +7,8 @@ import {
   Message,
   MESSAGE_ACTION,
   PERMISSIONS,
+  State,
+  WAITING_TIME_FOR_STARTING_RECORDING_IN_SECONDS,
 } from "../../Config";
 import {
   getPermissionStatus, sendMessageToExtensionPages,
@@ -14,7 +16,7 @@ import {
 
 import _ from "lodash";
 import { Button, Flex, Select, Text } from "@mantine/core";
-import { MainWindow } from "../Components";
+import { MainWindow, RecordingCountDown, PostRecordingScreen } from "../Components";
 
 type SelectOption = {
   value: string;
@@ -24,13 +26,6 @@ type SelectOption = {
 const NoMicrophone: SelectOption = {
   value: "",
   label: "No Audio"
-}
-
-enum State {
-  Initial = 1,
-  ProcessingRecording,
-  RecordingCompleted,
-  UploadingRecording
 }
 
 const PERMISSION_IFRAME_ID = "demobites_permissionsIFrame";
@@ -45,6 +40,7 @@ const Layout = () => {
   const [maxDurationInSeconds, setMaxDurationInSeconds] = useState(0);
   const [initialWindowWidth, setInitialWindowWidth] = useState(0);
   const [initialWindowHeight, setInitialWindowHeight] = useState(0);
+  const [didFinishedDueToTimeLimit, setDidFinishedDueToTimeLimit] = useState(false);
   
   const onMessageListener = async (msg: Message, sender: Runtime.MessageSender, sendResponse: any) => {
     switch (msg.action) {
@@ -91,6 +87,7 @@ const Layout = () => {
       }
       case MESSAGE_ACTION.PROCESSING_RECORDING: {
         setCurrentState(State.ProcessingRecording);
+        setDidFinishedDueToTimeLimit(msg.data.didFinishedDueToTimeLimit)
         setWillShowPopup(true);
         break;
       }
@@ -155,9 +152,13 @@ const Layout = () => {
   }
 
   const setInitialWindowSize = async () => {
-    const {windowWidth, windowHeight} = await sendMessageToExtensionPages(MESSAGE_ACTION.GET_WINDOW_SIZE);
-    setInitialWindowWidth(windowWidth);
-    setInitialWindowHeight(windowHeight);
+    const windowSize = await sendMessageToExtensionPages(MESSAGE_ACTION.GET_WINDOW_SIZE);
+    if (windowSize) {
+      const {windowWidth, windowHeight} = windowSize;
+      setInitialWindowWidth(windowWidth);
+      setInitialWindowHeight(windowHeight);
+    }
+    
   }
 
   useEffect(() => {
@@ -204,7 +205,8 @@ const Layout = () => {
 
   const startRecording = () => {
     setWillShowPopup(false);
-    sendMessageToExtensionPages(MESSAGE_ACTION.START_RECORDING, {selectedMicrophoneDeviceLabel, maxDurationInSeconds});
+    sendMessageToExtensionPages(MESSAGE_ACTION.INITIATE_RECORDING, {selectedMicrophoneDeviceLabel, maxDurationInSeconds});
+    setCurrentState(State.WaitingForRecordingStart);
   }
 
   const uploadRecording = () => {
@@ -217,6 +219,15 @@ const Layout = () => {
     setCurrentState(State.Initial);
     alert("Recording deleted successfully");
   }
+
+  if (currentState === State.WaitingForRecordingStart) {
+    return <RecordingCountDown 
+      onCountDownEnd={() => {
+        setCurrentState(State.Recording);
+        sendMessageToExtensionPages(MESSAGE_ACTION.READY_TO_START_RECORDING);
+      }}
+    />
+  }
   
   if (!willShowPopup) return null;
 
@@ -224,29 +235,17 @@ const Layout = () => {
     switch(currentState) {
       case State.Initial: {
         return (
-          <MainWindow initialWindowWidth={initialWindowWidth} initialWindowHeight={initialWindowHeight} />
-          // <div className={classes.wrapper} onClick={(event) => {event.stopPropagation()}}>
-          //   <Text size={20} weight={"bold"}>Welcome to Demo Bites</Text>
-          //   {
-          //     isLoading ? <Text size={16} mt={10}>Loading...</Text> : (
-          //       <>
-          //       <Select
-          //         data={micrphoneDevices}
-          //         label="Microphone"
-          //         placeholder="Select a Microphone"
-          //         defaultValue={micrphoneDevices.length > 1 ? micrphoneDevices[1].value : NoMicrophone.value}
-          //         checked
-          //         mt={20}
-          //         mb={20}
-          //         onChange={setSelectedMicrophoneDeviceLabel}
-          //       />
-          //       <Button onClick={startRecording}><Text>Record</Text></Button>
-          //       </>
-          //     )
-          //   }
-          // </div>
+          <MainWindow 
+            initialWindowWidth={initialWindowWidth} 
+            initialWindowHeight={initialWindowHeight}
+            microphoneDevices={micrphoneDevices}
+            selectedMicrophone={selectedMicrophoneDeviceLabel}
+            onMicrodeviceChange={setSelectedMicrophoneDeviceLabel}
+            startRecording={startRecording}
+          />
         )
       }
+      /*
       case State.ProcessingRecording: {
         return (
           <div className={classes.recordingCompletionActionsContainer}>
@@ -267,13 +266,23 @@ const Layout = () => {
           </div>
         )
       }
+      */
+      case State.ProcessingRecording:
+      case State.RecordingCompleted:
       case State.UploadingRecording: {
         return (
-          <div className={classes.recordingCompletionActionsContainer}>
-            <Flex gap={20}>
-              <Text>Don't close this tab till upload ends</Text>
-            </Flex>
-          </div>
+          // <div className={classes.recordingCompletionActionsContainer}>
+          //   <Flex gap={20}>
+          //     <Text>Don't close this tab till upload ends</Text>
+          //   </Flex>
+          // </div>
+          <PostRecordingScreen
+            currentState={currentState}
+            timeLimit={maxDurationInSeconds}
+            didFinishedDueToTimeLimit={didFinishedDueToTimeLimit}
+            uploadRecording={uploadRecording}
+            deleteRecording={deleteRecording}
+          />
         )
       }
       default: 

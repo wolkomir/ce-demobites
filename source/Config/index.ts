@@ -6,6 +6,8 @@ export enum MESSAGE_ACTION {
   TOGGLE_POPUP = "TOGGLE_POPUP",
   HIDE_POPUP = "HIDE_POPUP",
   SHOW_POPUP = "SHOW_POPUP",
+  INITIATE_RECORDING = "INITIATE_RECORDING",
+  READY_TO_START_RECORDING = "READY_TO_START_RECORDING",
   START_RECORDING = "START_RECORDING",
   RECORDING_STARTED = "RECORDING_STARTED",
   CANCEL_RECORDING = "CANCEL_RECORDING",
@@ -59,4 +61,15 @@ export const PERMISSIONS = {
 export const URLS = {
   MAIN_WEBSITE: 'https://www.google.com/',
   HELP_PAGE: 'https://www.google.com/',
+}
+
+export const WAITING_TIME_FOR_STARTING_RECORDING_IN_SECONDS = 3;
+
+export enum State {
+  Initial = 1,
+  WaitingForRecordingStart,
+  Recording,
+  ProcessingRecording,
+  RecordingCompleted,
+  UploadingRecording
 }

@@ -83,7 +83,7 @@ const PinnedTab = () => {
 
   const onMessageListener = async (msg: Message, sender: Runtime.MessageSender, sendResponse: any) => {
     switch (msg.action) {
-      case MESSAGE_ACTION.START_RECORDING: {
+      case MESSAGE_ACTION.INITIATE_RECORDING: {
         sendResponse({status: true});
         data.splice(0, data.length);
         const {selectedMicrophoneDeviceLabel, maxDurationInSeconds, targetTabId} = msg.data
@@ -165,12 +165,21 @@ const PinnedTab = () => {
                 recorder.onstop = async () => {
                   recorderOnStop();
                 };
-                recorder.start();
-                startStopRecordingTimer();
+                // recorder.start();
+                // startStopRecordingTimer();
               }
             );
           });
         return;
+      }
+      case MESSAGE_ACTION.START_RECORDING: {
+        if (recorder) {
+          recorder.start();
+          startStopRecordingTimer();
+        } else {
+          sendMessageToExtensionPages(MESSAGE_ACTION.RECORDING_CANCELLED, {error: "Recording cancelled. Couldn't start recording."});
+        }
+        break;
       }
       case MESSAGE_ACTION.STOP_RECORDING: {
         stopRecording();

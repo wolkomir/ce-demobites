@@ -19,6 +19,7 @@ import {
 import { getImagePath } from "../Utils";
 
 let isRecording:boolean = false;
+let isRecordingInitiated:boolean = false;
 let pinnedTabId:number = 0;
 let isWaitingForUploadOrDeletingRecording: boolean = false;
 let recordingData:Blob | null = null;
@@ -28,17 +29,17 @@ let recordingBinaryDataParts: string[] = [];
 let recordingBinaryDataPartsRecieved: number = 0;
 let lastTabIdExtensionClickedOn = 0;
 
-const focusThRecordingTab = () => {
+const focusTheRecordingTab = () => {
   browser.windows.update(recordingInitiatedOnWindowId, {focused: true})
   browser.tabs.update(recordingInitiatedOnTabId, {
     active: true,
   })
 }
 
-const stopRecording = () => {
+const stopRecording = (didFinishedDueToTimeLimit: boolean) => {
   isWaitingForUploadOrDeletingRecording = true;
-  sentMessageToContentScript(recordingInitiatedOnTabId, MESSAGE_ACTION.PROCESSING_RECORDING);
-  focusThRecordingTab();
+  sentMessageToContentScript(recordingInitiatedOnTabId, MESSAGE_ACTION.PROCESSING_RECORDING, {didFinishedDueToTimeLimit});
+  focusTheRecordingTab();
   isRecording = false;
   sentMessageToContentScript(pinnedTabId, MESSAGE_ACTION.STOP_RECORDING);
   browser.action.setIcon({path: getImagePath("not-recording.png")});
@@ -73,10 +74,13 @@ const toolbarIconClick = async (tab: Tabs.Tab) => {
     // await handleContentScriptInjection(tab.id, tab.url);
     
     if (isRecording) {
-      stopRecording();
+      stopRecording(false);
     } else {
+      if (isRecordingInitiated) {
+        return;
+      }
       if (isWaitingForUploadOrDeletingRecording) {
-        focusThRecordingTab();
+        focusTheRecordingTab();
       } else {
         if (isScriptableUrl(tab.url)) {
           if (pinnedTabId > 0) {
@@ -152,6 +156,7 @@ const resetRecordingSession = () => {
     text: ''
   });
   isRecording = false;
+  isRecordingInitiated = false;
   if (pinnedTabId > 0) {
     browser.tabs.remove(pinnedTabId);
     pinnedTabId = 0;
@@ -194,7 +199,7 @@ const onMessageListener = async (
         const response = await fetchSetupData();
         return response;
       }
-      case MESSAGE_ACTION.START_RECORDING: {
+      case MESSAGE_ACTION.INITIATE_RECORDING: {
         if (!tabId) {
           break;
         }
@@ -215,9 +220,10 @@ const onMessageListener = async (
 
             setTimeout(() => {
               if (pinnedTabId > 0) {
+                isRecordingInitiated = true;
                 // isRecording = true;
                 // chrome.action.setIcon({path: getImagePath("recording.png")});
-                sentMessageToContentScript(pinnedTabId, MESSAGE_ACTION.START_RECORDING,
+                sentMessageToContentScript(pinnedTabId, MESSAGE_ACTION.INITIATE_RECORDING,
                   {
                     // streamId,
                     selectedMicrophoneDeviceLabel,
@@ -234,6 +240,12 @@ const onMessageListener = async (
           }
           
         return;
+      }
+      case MESSAGE_ACTION.READY_TO_START_RECORDING: {
+        if (pinnedTabId > 0) {
+          sentMessageToContentScript(pinnedTabId, MESSAGE_ACTION.START_RECORDING);
+        }
+        break;
       }
       case MESSAGE_ACTION.RECORDING_STARTED: {
         sendResponse({status: true});
@@ -263,7 +275,7 @@ const onMessageListener = async (
       }
       case MESSAGE_ACTION.RECORDING_STOPPED_DUE_TO_TIME_LIMIT: {
         sendResponse({status: true});
-        stopRecording();
+        stopRecording(true);
         return;
       }
       case MESSAGE_ACTION.RECORDING_COMPLETED: {
@@ -338,7 +350,10 @@ const onMessageListener = async (
       case MESSAGE_ACTION.GET_WINDOW_SIZE: {
         sendResponse({status: true});
         const window = await browser.windows.getCurrent();
-        return {windowWidth: window.width, windowHeight: window.height};
+        if (window) {
+          return {windowWidth: window.width, windowHeight: window.height};
+        }
+        break;
       }
       case MESSAGE_ACTION.RESIZE_WINDOW: {
         const {windowWidth, windowHeight} = msg.data;
@@ -388,7 +403,7 @@ const tabUpdateHandler = async (
 
 const tabRemoveHandler = async (tabId: number, removeInfo: browser.Tabs.OnRemovedRemoveInfoType) => {
   if (tabId === recordingInitiatedOnTabId) {
-    if (isRecording) {
+    if (isRecording || isRecordingInitiated) {
       try {
         if (pinnedTabId > 0) {
           sentMessageToContentScript(pinnedTabId, MESSAGE_ACTION.CANCEL_RECORDING);
@@ -405,7 +420,7 @@ const tabRemoveHandler = async (tabId: number, removeInfo: browser.Tabs.OnRemove
     }
   } else if (tabId === pinnedTabId) {
     pinnedTabId = 0;
-    if (recordingInitiatedOnTabId > 0 && isRecording) {
+    if (recordingInitiatedOnTabId > 0 && (isRecording || isRecordingInitiated)) {
       sentMessageToContentScript(recordingInitiatedOnTabId, MESSAGE_ACTION.RECORDING_CANCELLED,{error: "Recording cancelled as the recording controlling tab was closed."}
       );
     }
